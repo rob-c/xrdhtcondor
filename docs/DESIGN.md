@@ -182,3 +182,26 @@ Two ways to settle it, both cheap next to the state machine itself:
 Until then the honest statement is: `xrdhtcondor` speaks CEDAR's framing to a
 real HTCondor-CE; it does not yet complete a security negotiation, and therefore
 does not yet submit.
+
+## Two findings from the local negotiation loop (2026-11-11, latest)
+
+1. **`SecurityRequest` never sent `CryptoMethods`** — the real client's message
+   carries `CryptoMethods = "AES,BLOWFISH,3DES"` and ours omitted it. Fixed; the
+   builder now sends it.
+2. **The message preamble is a per-message header, not a constant.** By
+   measuring every plaintext segment of the capture, the bytes in front of the
+   classad are `[u32 0][u32 234][0x6a][7 bytes][len(first name)+1]` in one
+   message and `[u32 0][u32 len(first name)+1]` in another, with the segments
+   alternating direction - so the fixtures mix the client's messages and the
+   server's, and a preamble copied from one is not the other's. That is why our
+   request, sent with a *reply's* preamble, gets silence from a schedd that
+   answers the captured bytes immediately (503 bytes, `Authentication = YES`,
+   `Enact = YES`).
+
+The route from here is short and definite: read `SecManStartCommand`'s message
+construction in `condor_secman.cpp` (the 40-method class this project already
+located) and reproduce the header from it, rather than inferring it from
+captures that alternate direction. Everything below the header - framing,
+classads, the session key, the AES-GCM packet layout - is implemented and
+tested, and the local schedd already answers a real client's bytes through this
+code.

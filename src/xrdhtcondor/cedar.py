@@ -227,6 +227,7 @@ class SecurityRequest:
             "AuthMethods": self.auth_methods,
             "Integrity": self.integrity,
             "RemoteVersion": self.remote_version,
+            "CryptoMethods": self.crypto_methods,
             "OutgoingNegotiation": self.integrity,
             "SessionLease": 3600,
             "Authentication": "REQUIRED",
