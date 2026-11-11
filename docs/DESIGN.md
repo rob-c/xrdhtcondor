@@ -149,3 +149,36 @@ The order that lands value soonest:
 3. **`GetJobAd`** makes status tracking, and then `get` is a sandbox fetch.
 4. The `xrdwms` backend last, because by then it is the third caller of the same
    client.
+
+## xrdhtcondor against IC-HEP, 2026-11-11: how far the layers reach
+
+`ceprod00.grid.hep.ph.ic.ac.uk:9619` (LHCb's HTCondor-CE at IC-HEP), with the
+modules that exist today:
+
+| step | result |
+| --- | --- |
+| TCP connect | accepted |
+| **our greeting** (`cedar.greeting("schedd")`, the 47 bytes the capture shows) | **accepted**: the CE holds the connection and answers nothing, where arbitrary bytes get an immediate reset |
+| our SECMAN request (GSI offered, a fresh P-256 key, the capture's preamble) | **no answer** (10 s timeout) |
+| the same with no preamble | no answer |
+
+So the two layers below the negotiation are right against a production
+HTCondor-CE as well as against the local schedd: the CE recognises its own
+framing and waits for a proper session request. What it does not do is answer
+ours, and the difference is the one piece the capture has not given up yet - the
+**preamble in front of the classad** (`00 00 00 00 00 00 00 ea 6a 00 00 00 00 00
+00 00 12 4e 65 67 …`), which is the SECMAN command's own encoding: an 8-byte
+integer (234) and a 1-byte something before the first attribute name, whose
+meaning lives in `SecManStartCommand`.
+
+Two ways to settle it, both cheap next to the state machine itself:
+
+* decode it from the local capture by trying the two plausibilities - an
+  `INT_SIZE`-padded `code(int)` (4 or 8 bytes) followed by the classad, or a
+  second framing layer - and check which one the local schedd answers;
+* read `SecManStartCommand::startCommand` (`condor_secman.cpp`) for the
+  message it builds, which is where that preamble comes from.
+
+Until then the honest statement is: `xrdhtcondor` speaks CEDAR's framing to a
+real HTCondor-CE; it does not yet complete a security negotiation, and therefore
+does not yet submit.
