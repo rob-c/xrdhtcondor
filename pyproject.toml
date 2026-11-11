@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.27,<1.32"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xrdhtcondor"
+dynamic = ["version"]
+description = "A pure-Python, LGPL HTCondor submission agent: classads, submit descriptions, and (specification-first) the CEDAR protocol a schedd speaks"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "LGPL-3.0-or-later" }
+authors = [{ name = "Robert Currie", email = "robert.andrew.currie@gmail.com" }]
+keywords = ["htcondor", "condor", "classad", "grid", "wlcg", "hep"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: System :: Distributed Computing",
+]
+# The shared core only, until the transport needs xrdsec's TLS/GSI.
+dependencies = ["xrdcore>=0.4.1,<0.5"]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1,<2",
+  "complexipy>=6,<7",
+  "mypy>=2.3,<2.5",
+  "pytest>=8",
+  "pytest-cov",
+  "pytest-timeout",
+  "radon>=6,<7",
+  "ruff>=0.5",
+  "twine>=6,<7",
+]
+
+[project.scripts]
+xrdhtcondor = "xrdhtcondor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rob-c/xrdhtcondor"
+Documentation = "https://github.com/rob-c/xrdhtcondor#readme"
+Repository = "https://github.com/rob-c/xrdhtcondor"
+Issues = "https://github.com/rob-c/xrdhtcondor/issues"
+Changelog = "https://github.com/rob-c/xrdhtcondor/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xrdhtcondor"]
+
+[tool.hatch.version]
+path = "src/xrdhtcondor/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../xrd-devtools/src", ".dependencies/xrd-devtools/src"]
+timeout = 120
+addopts = "-ra -p no:asyncio"
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+strict = true
+packages = ["xrdhtcondor"]
+
+[tool.complexipy]
+paths = ["src", "tests"]
+max-complexity-allowed = 15
+failed = true
