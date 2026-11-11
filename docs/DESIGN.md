@@ -120,3 +120,32 @@ The remaining path is now fully specified, each step with its source:
    `X509_USER_PROXY` - the parts `xrdsec.gsi` already knows how to drive.
 5. **The front end**: `xrdhtcondor submit/status/get` and the `xrdwms`
    `htcondor:<schedd>` backend, which is then mechanical.
+
+## The honest size of "fully compatible" (measured 2026-11-11)
+
+The three layers left are not small, and the source says how small they are not:
+
+| what | reference size | what it contains |
+| --- | --- | --- |
+| SECMAN client | `condor_secman.cpp`: 4,268 lines, a `SecManStartCommand` state machine of 40 methods across two classes | the start/resume/continue states, session caching and reuse, the `Enact`/session handshake, the two handshake digests, fallback to another method, and the failure codes a client has to distinguish |
+| GSI authentication | `condor_auth_x509` (the X.509 method's own file, ~1.5k lines) | the certificate exchange, the signed nonce, the proxy chain and the mapping onto a submitter - overlapping `xrdsec.gsi`, which already implements the GSS/CEDAR half of a grid login |
+| QMGMT | `qmgmt_receivers.cpp` 1,254 lines (server side) plus the send stubs | 28 opcodes, their argument orders, transactions and their error semantics |
+| monitoring | `condor_q`'s paths | job ads, history, and the `GetJobAd`/`GetAllJobsByConstraint` encodings |
+
+So "fully compatible" is a multi-week implementation with a live schedd in the
+loop - not a finishing sprint. What that loop is worth: the *local personal
+Condor* answers every mistake with a reason (unlike a CE, which resets), so each
+of the layers above can be built and checked there, one opcode at a time, before
+anything is pointed at IC-HEP.
+
+The order that lands value soonest:
+
+1. **CLAIMTOBE first, not GSI**: SECMAN with `AuthMethods = "CLAIMTOBE"` against
+   the local container proves the framing, the session frames, the key
+   derivation, the encryption and the QMGMT submit - everything except the
+   certificate exchange. GSI then replaces one method name in the negotiation.
+2. **`NewCluster` + `SetAttribute` + `CommitTransaction`** is a submission; that
+   is the first milestone worth calling "submits jobs".
+3. **`GetJobAd`** makes status tracking, and then `get` is a sandbox fetch.
+4. The `xrdwms` backend last, because by then it is the third caller of the same
+   client.
