@@ -53,3 +53,38 @@ So the project is staged, and only the first stages can be verified today:
   point is the machine that does not;
 * not a pilot: it submits *user* jobs, and the CE's policy decides whether it
   may.
+
+## A first attempt against IC-HEP (UK HTCondor-CE for LHCb), 2026-11-11
+
+`ceprod00.grid.hep.ph.ic.ac.uk` (146.179.233.210) is LHCb's HTCondor-CE at IC-HEP.
+What was established, from a macOS host and from an AlmaLinux 9 container with an
+HTCondor 23.0.28 client, the LHCb X.509 proxy and the IGTF CAs:
+
+| probe | result |
+| --- | --- |
+| TCP 9619 (schedd) | **open** |
+| TCP 9618 (collector) | **closed** from here |
+| `condor_q -name ceprod00…` (23.0.28, `SEC_CLIENT_AUTHENTICATION_METHODS=GSI`) | fails: it asks the collector, which is not reachable — "the condor_collector is not responding" |
+| `condor_q -direct schedd` with a hand-written `SCHEDD_ADDRESS_FILE` | refused: HTCondor wants an address file a *running* schedd writes, so the stock client cannot be pointed at 9619 from outside |
+| connect, send nothing | held open, silent |
+| any guessed frame (empty, 4-byte int, 8-byte pair, a text command) | **immediate connection reset** |
+
+Two conclusions, both useful:
+
+1. **A stock HTCondor client cannot submit to this CE from outside**, because
+   discovery goes through the collector and that port is firewalled. A client that
+   speaks 9619 directly, with the address supplied out of band, does something
+   `condor_submit` here cannot — which is precisely `xrdhtcondor`'s premise.
+2. **The protocol cannot be derived by probing.** Every wrong guess is answered by
+   the same reset, so there is no signal to learn from and no error text to read.
+   The CEDAR layer therefore needs a **capture of a working exchange**, which has
+   to be taken where a real `condor_submit` can reach that schedd:
+
+   * on the CE itself (`tcpdump -i any -s0 -w cedar.pcap tcp port 9619` while
+     `condor_submit` runs) — CEDAR is plaintext unless `ENCRYPTION_METHODS` says
+     otherwise, so the capture is readable as it stands; or
+   * on any GridPP node where `condor_q -name ceprod00…` works (the collector is
+     reachable from inside), recording the same way.
+
+   That capture is the input stage 3 needs; nothing before it can be written
+   honestly.
