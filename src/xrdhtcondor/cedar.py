@@ -120,8 +120,7 @@ def wire_classads(attributes: Mapping[str, Any]) -> bytes:
     if any("\x00" in name for name in attributes):
         raise CedarError("an attribute name cannot contain NUL: it separates the pairs")
     return b"".join(
-        f"{name} = {format_value(value)}".encode() + b"\x00"
-        for name, value in attributes.items()
+        f"{name} = {format_value(value)}".encode() + b"\x00" for name, value in attributes.items()
     )
 
 
