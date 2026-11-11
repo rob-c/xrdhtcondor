@@ -88,3 +88,35 @@ Two conclusions, both useful:
 
    That capture is the input stage 3 needs; nothing before it can be written
    honestly.
+
+## What is now implemented, and what is left (2026-11-11, later)
+
+Implemented, tested to 100 % and green: `classads`, `submitfile`, `cedar`
+(framing, deframer, greeting - byte-identical to the capture, wire classads,
+SECMAN request/reply) and `crypto` (HKDF-SHA256 key, IV scheme, AES-256-GCM
+packet layout, handshake-digest AAD). 69 tests, six modules, no gaps.
+
+The remaining path is now fully specified, each step with its source:
+
+1. **`ReliSock`'s scalar encoding** (`condor_io/stream.cpp`): `code(int)` is a
+   big-endian `int`, sign-extended to `INT_SIZE` bytes; `code(string)` is the
+   bytes and a NUL, with no length prefix - the frame's length already bounds it.
+   The ciphertext's *padding* to a multiple of the block size (or not) has to be
+   read out of `reli_sock.cpp` before the packet layout is final.
+2. **The SECMAN client flow** (`condor_io/condor_secman.cpp`): greeting, the
+   request classad with our ECDH public key, the reply's key, then the session
+   frames the capture shows - the 8-byte `\x02`/`\x01` exchanges and the identity
+   (`tester\0`) - and the two SHA-256 handshake digests over everything sent and
+   received before the first encrypted packet.
+3. **QMGMT** (`condor_schedd.V6/qmgmt_constants.h`, `qmgmt_receivers.cpp`):
+   `CONDOR_InitializeConnection` 10001, `CONDOR_NewCluster` 10002,
+   `CONDOR_SetAttribute` 10006 (`code(cluster)`, `code(proc)`, `code(value)`,
+   `code(name)`, `end_of_message()`, reply `code(rval)`, `code(terrno)`),
+   `CONDOR_CommitTransactionNoFlags` 10007, `CONDOR_GetJobAd` 10018. The second
+   connection in the capture announces `Command = 421` and a `Nonce`: that is the
+   SECMAN session for the QMGMT command, which is how a submit reaches a schedd.
+4. **GSI authentication** (`condor_io/condor_auth_x509.cpp`): what a grid CE
+   requires, over the same SECMAN negotiation (`AuthMethods = "GSI"`), presenting
+   `X509_USER_PROXY` - the parts `xrdsec.gsi` already knows how to drive.
+5. **The front end**: `xrdhtcondor submit/status/get` and the `xrdwms`
+   `htcondor:<schedd>` backend, which is then mechanical.
