@@ -32,3 +32,14 @@ docker compose exec submit condor_q          # schedd@submit
 - **Security classes are per subsystem and per access level.** A pool needs
   `ALLOW_ADVERTISE_SCHEDD`/`ALLOW_ADVERTISE_STARTD` as well as `ALLOW_*`, and its
   config must load *after* the packaged `00-htcondor-9.0.config` (hence `98-`).
+
+## The next milestone: the session itself
+
+`probe_session.py` is the experiment that comes next, and it is not in `run.sh`
+because it does not pass yet. It negotiates, derives the session key from the
+shared secret (`32 bytes -> 32 bytes`, HKDF as `crypto.py` implements it), and
+sends one sealed QMGMT packet - to which the schedd does not reply. What that
+leaves to settle is the session framing: the 64 handshake-digest bytes in front
+of the first packet in each direction, and whether the peer validates them or
+merely uses them as additional authenticated data, plus the exact shape of the
+QMGMT session-start message after `Command = 421`.
