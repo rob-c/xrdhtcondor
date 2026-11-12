@@ -314,3 +314,33 @@ Two things we got wrong and now know:
    with a NUL, as segment 5 of the capture shows). Our attempt at that frame is
    refused and resets the connection, so its exact shape - or the point in the
    exchange at which it belongs - is still open.
+
+## QMGMT, mapped out against the pool
+
+`qmgmt_constants.h` gives the opcodes and `qmgmt_receivers.cpp` the arguments:
+
+| command | opcode | message |
+| --- | --- | --- |
+| `InitializeConnection` | 10001 | the opcode alone |
+| `NewCluster` | 10002 | the opcode alone; reply is the new cluster id |
+| `SetAttribute` | 10006 | cluster, proc, **value**, **name** |
+| `CommitTransactionNoFlags` | 10007 | the opcode alone |
+
+Each is its own message, and each reply is `code(int rval)`, plus `code(int
+terrno)` when it failed. A cluster-level attribute uses proc `-1`, and strings go
+on the wire with their NUL. `QMGMT_BASE` is 1110, so the queue manager's own
+command is `QMGMT_WRITE_CMD` 1112 - the value our `SecurityRequest` defaults to.
+
+Against the pool, `InitializeConnection` answers `0`, so the framing is right.
+`NewCluster` then closes the connection, and the schedd says why in one line:
+
+```
+DC_AUTHENTICATE: authentication of <...> did not result in a valid mapped user
+name, which is required for this command (1112 QMGMT_WRITE_CMD), so aborting.
+```
+
+A query can be anonymous; a *write* cannot. So the last piece is not QMGMT at all,
+it is authentication: asking for `Authentication = "REQUIRED"` moves the failure
+on to `AUTHENTICATE:1002:Failure performing handshake`, which is where the
+CLAIMTOBE identity (`code(int 1)` then the name with a NUL, segment 5 of the
+capture) has to be sent correctly - and where GSI would go for a real CE.

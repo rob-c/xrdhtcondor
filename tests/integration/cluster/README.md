@@ -43,3 +43,18 @@ leaves to settle is the session framing: the 64 handshake-digest bytes in front
 of the first packet in each direction, and whether the peer validates them or
 merely uses them as additional authenticated data, plus the exact shape of the
 QMGMT session-start message after `Command = 421`.
+
+## `probe_qmgmt.py`: how far QMGMT gets
+
+It negotiates for `QMGMT_WRITE_CMD` (1112), sends `InitializeConnection` (which
+the pool answers `0`, so the framing is right), and then `NewCluster` - where the
+pool closes the connection, having logged:
+
+```
+DC_AUTHENTICATE: authentication of <...> did not result in a valid mapped user
+name, which is required for this command (1112 QMGMT_WRITE_CMD), so aborting.
+```
+
+A collector query may be anonymous; a queue-manager write may not. The remaining
+work is therefore authentication (CLAIMTOBE's identity correctly sent, and GSI for
+a real CE), not more QMGMT framing.
