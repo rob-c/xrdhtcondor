@@ -709,3 +709,35 @@ plain self-signed client certificate.
 What is left is the TLS-inside-CEDAR handshake itself, and it can now be iterated
 locally: the pool gives both ends and its log says exactly when `SSL_accept` gives
 up.
+
+## The wall, named: LHCb's tokens are Ed25519 and HTCondor cannot verify them
+
+A live **LHCb DiracX** token (`iss=https://lhcbdiracx.app.cern.ch`,
+`preferred_username=rcurrie`, `dirac_group=lhcb_user`, 20 minutes) was offered to
+seven CEs by both this client and a real HTCondor 9.0.17 client. Both were refused,
+and the capture shows why nothing was even sent after SECMAN.
+
+The token's header:
+
+```
+{"typ": "JWT", "alg": "Ed25519", "kid": "019d8699080177838ef420eec393ad76"}
+```
+
+and HTCondor's SciTokens library has **no Ed25519 support** - not the 0.0.3 build in
+the test client, and not `scitokens-cpp 1.4.1`, the newest release:
+
+```
+$ strings /usr/lib64/libSciTokens.so.0 | grep -icE "ed25519|eddsa"
+0
+```
+
+So this is not a trust decision, an audience, or a client bug: an HTCondor-CE cannot
+verify a DiracX token at all. The two pieces of the puzzle do not meet:
+
+- the issuer whose tokens LHCb's sites trust signs with **Ed25519**, which HTCondor
+  cannot check;
+- the issuer that signs with **RS256** (the WLCG reference IAM) is not trusted by
+  those sites.
+
+Either LHCb's DiracX adds an RS256/ES256 signing key, or a site trusts the WLCG IAM -
+and either one unblocks `xrdhtcondor auth` in a single run.
