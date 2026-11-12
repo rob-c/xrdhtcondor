@@ -66,7 +66,7 @@ def test_the_version_is_printed() -> None:
     assert stopped.value.code == 0
 
 
-def test_auth_lists_the_tokens_it_found(tmp_path: Any, monkeypatch: Any) -> None:
+def test_auth_lists_the_tokens_it_found(tmp_path: Any, monkeypatch: Any, capsys: Any) -> None:
     """``--list`` says what is available before any daemon is troubled."""
     from xrdhtcondor import scitokens
 
@@ -75,6 +75,7 @@ def test_auth_lists_the_tokens_it_found(tmp_path: Any, monkeypatch: Any) -> None
         scitokens, "candidates", lambda *a, **k: [scitokens.Token("p", token, {"sub": "rcurrie"})]
     )
     assert main(["auth", "--host", "ce.example", "--list"]) == 0
+    assert "rcurrie" in capsys.readouterr().out
 
 
 def test_auth_reports_a_refusal(tmp_path: Any, monkeypatch: Any) -> None:
@@ -116,3 +117,12 @@ def test_auth_accepts_an_identity_the_daemon_took(monkeypatch: Any) -> None:
         ),
     )
     assert main(["auth", "--host", "ce.example", "--token", "/dev/null"]) == 0
+
+
+def test_auth_says_so_when_there_is_no_token_to_list(monkeypatch: Any, capsys: Any) -> None:
+    """An empty search is worth saying out loud, with where to put one."""
+    from xrdhtcondor import scitokens
+
+    monkeypatch.setattr(scitokens, "candidates", lambda *a, **k: [])
+    assert main(["auth", "--host", "ce.example", "--list"]) == 0
+    assert "no tokens found" in capsys.readouterr().out

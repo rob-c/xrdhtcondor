@@ -139,9 +139,17 @@ def _auth(args: Any) -> int:
     from . import scitokens
 
     if args.list:
-        for token in scitokens.candidates():
-            scitokens_of = token.claims.get("sub")
-            output.record("token", path=token.path, issuer=token.issuer, subject=scitokens_of)
+        found = scitokens.candidates()
+        for token in found:
+            said = str(token.claims.get("sub") or "")
+            output.record("token", path=token.path, issuer=token.issuer, subject=said)
+            if not args.quiet:
+                output.message(
+                    f"{token.path}\n  issuer  : {token.issuer}\n"
+                    f"  subject : {said}\n  audience: {' '.join(token.audiences)}"
+                )
+        if not found and not args.quiet:
+            output.message("no tokens found: set SCITOKENS_FILE or put one in ~/.condor/tokens.d")
         return OK
     named: scitokens.Token | None = None
     if args.token:
