@@ -404,3 +404,24 @@ What follows is the enacted session: a plaintext `InitializeConnection` after th
 handshake gets nothing at all, and the capture's next frames are ciphertext. So the
 session cipher is the last piece of a submit, and everything before it - greeting,
 negotiation, identity, mapped user - now works against a real schedd.
+
+## The session AAD, solved against the daemon's own log
+
+`D_NETWORK` makes HTCondor print the AAD it expects, so the rule can be *read out*
+rather than guessed. A probe recorded exactly what it sent, the schedd logged what
+it expected, and one candidate matched byte for byte:
+
+    sha256 of every frame from the SECMAN request onward, headers included
+    (the greeting is not part of it)
+
+| candidate | digest |
+| --- | --- |
+| all bytes sent | `8aa01f91…` |
+| payloads only | `34065932…` |
+| **frames after the greeting** | **`bb2ad9cf…` — the daemon's own value** |
+
+The same log line confirmed the framing independently: its trailing five bytes
+were `01 00 00 00 28` - type 1 and a length of 40, which is exactly the sealed size
+of an 8-byte `code(int)` with a 16-byte IV and a 16-byte tag. So the packet shape
+and its length are right, the AAD rule is now known exactly, and what is left is
+the key and IV derivation inside the session.
