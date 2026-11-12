@@ -9,7 +9,7 @@ import socket
 import ssl
 import struct
 import threading
-from typing import Self
+from typing import Any, Self
 
 import pytest
 
@@ -441,24 +441,101 @@ def test_the_socket_wiring_sends_a_greeting_then_negotiates(
     assert connection.sent.startswith(cedar.greeting("collector"))
 
 
-def test_a_daemon_that_enacts_a_session_is_named_as_the_reason() -> None:
-    """An enacted session is why a clear-text exchange would be ignored - say so."""
+def test_an_enacted_session_is_where_the_records_have_to_go() -> None:
+    """With ``Enact`` the exchange is sealed; silence inside it is named as such."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    peer = ec.generate_private_key(ec.SECP256R1())
+    peer_public = base64.b64encode(
+        peer.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    ).decode()
+    sent: list[bytes] = []
 
     class _Enacting:
+        def __init__(self) -> None:
+            self.round = 0
+
+        def send(self, payload: bytes) -> None:
+            sent.append(payload)
+
+        def receive(self) -> bytes:
+            self.round += 1
+            if self.round == 1:
+                return cedar.frame(
+                    cedar.put_classad(
+                        {
+                            "AuthMethods": "SCITOKENS",
+                            "Authentication": "YES",
+                            "Enact": "YES",
+                            "Encryption": "YES",
+                            "ECDHPublicKey": peer_public,
+                        }
+                    )
+                )
+            return b""
+
+    with pytest.raises(scitokens.SciTokenError, match="inside the session"):
+        scitokens.negotiate(_Enacting(), scitokens.Token("p", _jwt(), {}))
+    # Two messages go out: the SECMAN request in clear, the records sealed.
+    assert len(sent) == 2
+    assert sent[1][0] == 0x01
+    assert int.from_bytes(sent[1][1:5], "big") == len(sent[1]) - 5
+
+
+def test_the_records_travel_sealed_and_come_back_opened() -> None:
+    """The sealed exchange: our records go out sealed, the daemon's come back opened."""
+    here, there = _pair()
+    here._sent.update(b"what we said")
+    there._heard.update(b"what we said")
+    sent: list[bytes] = []
+
+    class _Framed:
+        def send(self, payload: bytes) -> None:
+            sent.append(payload)
+
+        def receive(self) -> bytes:
+            # The daemon reads our sealed frame before it answers, so its digest of
+            # what it has heard includes it - which is exactly the AAD rule.
+            there._heard.update(sent[-1])
+            return there.seal(scitokens.message(scitokens.SENDING, b"server records"))
+
+    step = scitokens.sealed_exchange(_Framed(), here)
+    answer = step(b"client records")
+    assert scitokens.parse_message(answer) == (scitokens.SENDING, b"server records")
+    assert sent[0][0] == 0x01  # a sealed frame, not a clear message
+
+
+def test_a_sealed_exchange_that_goes_quiet_says_where() -> None:
+    """Silence inside the session is named as such, not as a TLS problem."""
+    here, _there = _pair()
+
+    class _Silent:
         def send(self, _payload: bytes) -> None:
             return None
 
         def receive(self) -> bytes:
-            return cedar.frame(
-                cedar.put_classad(
-                    {
-                        "AuthMethods": "SCITOKENS",
-                        "Authentication": "YES",
-                        "Enact": "YES",
-                        "Encryption": "YES",
-                    }
-                )
-            )
+            return b""
 
-    with pytest.raises(scitokens.SciTokenError, match="enacted an encrypted session"):
-        scitokens.negotiate(_Enacting(), scitokens.Token("p", _jwt(), {}))
+    with pytest.raises(scitokens.SciTokenError, match="inside the session"):
+        scitokens.sealed_exchange(_Silent(), here)(b"records")
+
+
+def _pair() -> tuple[scitokens.Any, scitokens.Any]:
+    """Two ends of one session, as the session tests build them."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    from xrdhtcondor import session
+
+    one = ec.generate_private_key(ec.SECP256R1())
+    two = ec.generate_private_key(ec.SECP256R1())
+
+    def public(key: object) -> bytes:
+        holder: Any = key
+        return holder.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+
+    return (
+        session.Session.between(one, public(two)),
+        session.Session.between(two, public(one)),
+    )

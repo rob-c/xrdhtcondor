@@ -169,12 +169,11 @@ def choose(found: Sequence[Token], audience: str = "") -> Token:
     return found[0]
 
 
-def _ecdh_public() -> str:
-    """A fresh P-256 public key, as a SECMAN request advertises one."""
-    from cryptography.hazmat.primitives.asymmetric import ec
+def _public_of(private: object) -> str:
+    """The base64 uncompressed point a SECMAN request advertises."""
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-    key = ec.generate_private_key(ec.SECP256R1())
+    key: Any = private
     return base64.b64encode(
         key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
     ).decode()
@@ -251,6 +250,23 @@ def authenticate(
     return status
 
 
+def sealed_exchange(framed: Any, formed: Any) -> Callable[[bytes], bytes]:
+    """An exchange whose records travel inside the enacted session.
+
+    The daemon encrypts both directions once SECMAN enacts, so the SciTokens records
+    are sealed on the way out and opened on the way back.
+    """
+
+    def step(records: bytes) -> bytes:
+        framed.send(formed.seal(message(RECEIVING, records)))
+        answer = framed.receive()
+        if not answer:
+            raise SciTokenError("the daemon closed the connection inside the session")
+        return formed.open(answer)
+
+    return step
+
+
 def _classads_of(reply: bytes) -> dict[str, Any]:
     """The attributes of a reply, whether or not its frame is still attached."""
     for candidate in (reply, *(body for _kind, body in cedar.Deframer().feed(reply))):
@@ -318,9 +334,12 @@ def negotiate(
     connect_sinful: str = "",
 ) -> Verdict:
     """Offer SCITOKENS for ``command``, then present ``token`` when it is taken."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private = ec.generate_private_key(ec.SECP256R1())
     request = cedar.SecurityRequest(
         auth_methods="SCITOKENS",
-        ecdh_public=_ecdh_public(),
+        ecdh_public=_public_of(private),
         remote_version=VERSION,
         encryption="OPTIONAL",
         integrity="OPTIONAL",
@@ -334,21 +353,27 @@ def negotiate(
     if not reply:
         raise SciTokenError("the daemon closed the connection before negotiating")
     merged = _classads_of(reply)
-    if str(merged.get("Enact") or "").upper() in {"YES", "TRUE"} and str(
+    enacted = str(merged.get("Enact") or "").upper() in {"YES", "TRUE"} and str(
         merged.get("Encryption") or ""
-    ).upper() in {"YES", "TRUE"}:
-        raise SciTokenError(
-            "the daemon enacted an encrypted session (Enact/Encryption = YES), so the"
-            " token exchange has to be sealed with the session key; this client does not"
-            " implement that session yet, and the daemon will ignore anything sent in clear"
-        )
+    ).upper() in {"YES", "TRUE"}
     if merged.get("AuthMethods") != "SCITOKENS":
         raise SciTokenError(
             "the daemon did not offer SCITOKENS: it said "
             f"{merged.get('AuthMethods')!r} (it may not support tokens, or not this issuer)"
         )
-    status = authenticate(framed.exchange, token)
-    return Verdict(negotiated=merged, status=status)
+    if not enacted:
+        return Verdict(negotiated=merged, status=authenticate(framed.exchange, token))
+
+    # The daemon encrypts both directions from here: the SciTokens TLS records have
+    # to travel inside the enacted session, sealed with the key SECMAN exchanged.
+    from . import session as enacted_session
+
+    public = base64.b64decode(str(merged.get("ECDHPublicKey") or ""))
+    formed = enacted_session.Session.between(private, public)
+    formed._sent.update(cedar.frame(cedar.security_message(request.as_classads())))
+    formed._heard.update(cedar.frame(reply))
+
+    return Verdict(negotiated=merged, status=authenticate(sealed_exchange(framed, formed), token))
 
 
 def authenticate_daemon(

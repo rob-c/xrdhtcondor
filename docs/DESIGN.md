@@ -656,3 +656,25 @@ Until then, `xrdhtcondor auth` says exactly that rather than failing obscurely.
 
 The pair is exercised both ways in the tests, including a tampered packet, a packet
 out of order, and a stranger's key.
+
+## What a live WLCG-IAM token showed: the site will not take it
+
+With a fresh, valid token (WLCG reference IAM, `aud=https://wlcg.cern.ch/jwt/v1/any`,
+`scope=storage.stage:/ wlcg.groups`, groups `/wlcg` and `/wlcg/pilots`), a **real**
+HTCondor 9.0.17 client with `scitokens-cpp` was pointed at seven CEs:
+
+```
+condorce01.cern.ch  ce503.cern.ch  ce15.pic.es  htcondor-ce-1-kit.gridka.de
+hepcondor.ph.liv.ac.uk  lcgce02.phy.bris.ac.uk  htc01.ppgrid1.rhul.ac.uk
+```
+
+Every one answered `1003: Failed to authenticate with any method` followed by
+`1004: Failed to authenticate using SCITOKENS`. Since a real client cannot use this
+token either, the refusal is the **token's issuer and audience**, not this client:
+those CEs want tokens from issuers they trust - LHCb's own IAM, or CERN's - and a
+WLCG reference IAM token is not one of them.
+
+So `xrdhtcondor`'s token support is complete as far as a client can take it: finding
+a token, choosing one by audience, negotiating SCITOKENS, and sealing the exchange
+when the daemon enacts a session. What it cannot do is make a site trust an issuer it
+does not trust.
