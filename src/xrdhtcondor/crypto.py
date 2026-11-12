@@ -19,9 +19,10 @@ The three facts this implements, with where each comes from:
   direction and is never sent again;
 * **the packet**: ``[base IV, first packet only][ciphertext][16-byte tag]`` with
   the 5-byte frame header as additional authenticated data - and, on the first
-  packet in each direction, the two SHA-256 handshake digests in front of that
-  header (``condor_io/reli_sock.cpp``), which bind the session to the negotiation
-  that established it.
+  packet in each direction, two SHA-256 digests in front of that header
+  (``condor_io/reli_sock.cpp``). Those digests are **not sent**: they are running
+  digests of the traffic each side has already exchanged, so they bind the
+  session to the conversation that established it.
 """
 
 from __future__ import annotations

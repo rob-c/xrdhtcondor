@@ -362,3 +362,20 @@ implements the cipher (HKDF-SHA256 with the `"htcondor"` salt and `"keygen"` inf
 over the ECDH secret, AES-256-GCM, the IV counters, the handshake-digest AAD), and
 the session framing is now the one piece left before a job can be submitted by our
 own messages: `probe_session.py` is where that is being settled, against this pool.
+
+### The session's wire form, read out of `reli_sock.cpp`
+
+`ReliSock::put` under AES-GCM writes `[type byte][uint32 length][ciphertext][tag]`
+- and **nothing else**. The handshake digests are not transmitted: they are
+**running SHA-256 digests of the connection's own traffic**, kept in
+`m_send_md_ctx` and `m_recv_md_ctx`, and used only as additional authenticated
+data. On the first encrypted packet the AAD is
+
+    SHA256(traffic sent so far) || SHA256(traffic received so far) || header   (69 bytes)
+
+and on every later packet it is just the five-byte header. Our field name for
+them, "handshake", is a misnomer: they are the connection's own history.
+
+`probe_session.py` sent 64 zero bytes on the wire before the header, which is
+wrong twice over - those bytes are not sent at all, and their content must be the
+real digests. That is the correction to make before the session can open.
