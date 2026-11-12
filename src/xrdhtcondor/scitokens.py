@@ -229,7 +229,7 @@ def authenticate(
     token: Token,
     *,
     context: ssl.SSLContext | None = None,
-) -> str:
+) -> int:
     """Present ``token`` and return the last status the daemon gave.
 
     ``exchange`` sends one handshake message and returns the daemon's reply; it is

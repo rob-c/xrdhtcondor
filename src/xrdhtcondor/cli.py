@@ -143,14 +143,15 @@ def _auth(args: Any) -> int:
             scitokens_of = token.claims.get("sub")
             output.record("token", path=token.path, issuer=token.issuer, subject=scitokens_of)
         return OK
-    chosen = None
+    named: scitokens.Token | None = None
     if args.token:
-        chosen = scitokens.candidates({"SCITOKENS_FILE": args.token})
-        if not chosen:
+        found = scitokens.candidates({"SCITOKENS_FILE": args.token})
+        if not found:
             return _fail(f"no token in {args.token}")
+        named = found[0]
     try:
         verdict = scitokens.authenticate_daemon(
-            args.host, args.sock, (chosen or [None])[0], port=args.port, command=args.command
+            args.host, args.sock, named, port=args.port, command=args.command
         )
     except (scitokens.SciTokenError, OSError) as refused:
         return _fail(str(refused))
