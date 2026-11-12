@@ -18,3 +18,11 @@ What exists today is the part that needs no server:
   mean.
 
 Both are needed by every later layer, and both are testable to the last branch.
+
+### The bug that took the longest
+
+A collector query with `Requirements` written as the *string* `"true"` matches
+nothing: the collector evaluates a type error, skips the ad, and answers with no
+ads at all - not an error, just emptiness. It has to be the boolean, unquoted, as
+`format_value(True)` writes it. The collector's own `D_FULLDEBUG` says so
+(`matched=0; skipped=1`); nothing else does.
