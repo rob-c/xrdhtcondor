@@ -490,3 +490,19 @@ One more observation from the recording: during the handshake the daemon sends f
 frames, and the last of them (376 bytes) is already ciphertext - it opens the
 session from its side. A client that treats it as a stray message and ignores it
 will never see the state the daemon expects.
+
+### A negative result worth keeping
+
+The daemon's last handshake frame (376 bytes) does **not** open under the key
+derived from the SECMAN ECDH exchange, with any of the AAD variants tried - the
+digests in either order, its own half alone, or none at all - and with any of the
+derivations tried (HKDF-32 with the documented salt and info, the salt and info
+swapped, `sha256(secret)`, `sha256(secret + "htcondor")`, and the raw secret).
+
+So that frame is either keyed by something other than the SECMAN secret, or it is
+not a session packet at all. The next thing to establish is what it *is* - its
+length (376 - 32 = 344 bytes of ciphertext under the assumed layout) and the fact
+that it arrives before any client session packet are the only clues.
+
+Everything else is settled and measured: the CLAIMTOBE handshake, the packet
+framing, the cipher choice, the IV rule, and both halves of the AAD.
