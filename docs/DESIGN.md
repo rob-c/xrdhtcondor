@@ -205,3 +205,22 @@ captures that alternate direction. Everything below the header - framing,
 classads, the session key, the AES-GCM packet layout - is implemented and
 tested, and the local schedd already answers a real client's bytes through this
 code.
+
+## Where the negotiation stands (latest)
+
+With the command and classad confirmed against the capture, the request works:
+
+- a personal HTCondor answers ours with `Authentication = "YES"`,
+  `Enact = "YES"`, `AuthMethods = "CLAIMTOBE"`;
+- our encoder writes a real client's message back byte-for-byte (671 bytes,
+  asserted in `tests/test_cedar.py`);
+- `DC_AUTHENTICATE` is 60010 (`DC_BASE` 60000 + 10), not the 234 that had been
+  guessed from the capture's hex, and `putClassAd` writes the attribute count in
+  front of the pairs and two empty strings after them.
+
+Against IC-HEP's HTCondor-CE (`ceprod00.grid.hep.ph.ic.ac.uk:9619`) the same
+request, offering GSI, now gets the connection **closed** rather than a hang -
+the CE parsed the message and refused it, which is what a CE does when it wants
+the GSI method it advertises. That is the next piece: `GSI` over CEDAR, whose
+handshake is Condor's own (its framing, its ECDH, its AES), not a copy of
+XrdSec's.
