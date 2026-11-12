@@ -63,6 +63,28 @@ def _parser() -> Parser:
     jobs.add_argument("--cluster", type=int, default=None, metavar="N", help="fill $(Cluster)")
     jobs.add_argument("-v", "--verbose", action="store_true", help="each job's attributes")
     jobs.set_defaults(handler=_jobs)
+    auth = commands.add_parser(
+        "auth",
+        help="become a known user at a daemon with a WLCG token (SCITOKENS)",
+    )
+    _common(auth)
+    auth.add_argument("--host", required=True, metavar="HOST", help="the daemon's host")
+    auth.add_argument(
+        "--sock", default="collector", metavar="NAME", help="the shared-port sock name"
+    )
+    auth.add_argument("--port", type=int, default=9619, metavar="N", help="the shared port")
+    auth.add_argument("--token", metavar="PATH", help="a token file (default: the usual search)")
+    auth.add_argument(
+        "--command",
+        type=int,
+        default=6,
+        metavar="N",
+        help="the command the session is negotiated for (6: collector query, 1112: submit)",
+    )
+    auth.add_argument(
+        "--list", action="store_true", help="show the tokens that were found, and stop"
+    )
+    auth.set_defaults(handler=_auth)
     return parser
 
 
@@ -110,6 +132,43 @@ def _jobs(args: Any) -> int:
                 output.message(f"--- job {job.process}\n")
                 output.message(format_ad(job.attributes))
     return OK
+
+
+def _auth(args: Any) -> int:
+    """``auth``: greet a daemon, offer SCITOKENS, and say what it decided."""
+    from . import scitokens
+
+    if args.list:
+        for token in scitokens.candidates():
+            scitokens_of = token.claims.get("sub")
+            output.record("token", path=token.path, issuer=token.issuer, subject=scitokens_of)
+        return OK
+    chosen = None
+    if args.token:
+        chosen = scitokens.candidates({"SCITOKENS_FILE": args.token})
+        if not chosen:
+            return _fail(f"no token in {args.token}")
+    try:
+        verdict = scitokens.authenticate_daemon(
+            args.host, args.sock, (chosen or [None])[0], port=args.port, command=args.command
+        )
+    except (scitokens.SciTokenError, OSError) as refused:
+        return _fail(str(refused))
+    output.record(
+        "result",
+        host=args.host,
+        sock=args.sock,
+        method=verdict.negotiated.get("AuthMethods"),
+        trust_domain=verdict.negotiated.get("TrustDomain"),
+        accepted=verdict.accepted,
+    )
+    if not args.quiet:
+        output.message(
+            f"{args.host} sock={args.sock}: "
+            f"{'accepted' if verdict.accepted else 'refused'} "
+            f"({verdict.negotiated.get('AuthMethods')})"
+        )
+    return OK if verdict.accepted else ERROR
 
 
 def _shown(value: Any) -> str:

@@ -64,3 +64,55 @@ def test_the_version_is_printed() -> None:
     with pytest.raises(SystemExit) as stopped:
         main(["--version"])
     assert stopped.value.code == 0
+
+
+def test_auth_lists_the_tokens_it_found(tmp_path: Any, monkeypatch: Any) -> None:
+    """``--list`` says what is available before any daemon is troubled."""
+    from xrdhtcondor import scitokens
+
+    token = "header." + "eyJzdWIiOiJyY3VycmllIiwiaXNzIjoiaHR0cHM6Ly9pYW0ifQ" + ".sig"
+    monkeypatch.setattr(
+        scitokens, "candidates", lambda *a, **k: [scitokens.Token("p", token, {"sub": "rcurrie"})]
+    )
+    assert main(["auth", "--host", "ce.example", "--list"]) == 0
+
+
+def test_auth_reports_a_refusal(tmp_path: Any, monkeypatch: Any) -> None:
+    """A daemon that will not take the token is a failure, said in its own words."""
+    from xrdhtcondor import scitokens
+
+    def refused(*_a: Any, **_k: Any) -> None:
+        raise scitokens.SciTokenError("the daemon did not offer SCITOKENS")
+
+    monkeypatch.setattr(scitokens, "authenticate_daemon", refused)
+    assert main(["auth", "--host", "ce.example"]) == 1
+
+
+def test_auth_says_nothing_when_the_token_file_is_empty(tmp_path: Any) -> None:
+    """A named token file with no token is refused before connecting."""
+    empty = tmp_path / "empty"
+    empty.write_text("\n")
+    assert main(["auth", "--host", "ce.example", "--token", str(empty)]) == 1
+
+
+def test_auth_accepts_an_identity_the_daemon_took(monkeypatch: Any) -> None:
+    """The whole point: a token the daemon accepts is reported as accepted."""
+    from xrdhtcondor import scitokens
+
+    token = "header.eyJzdWIiOiJyY3VycmllIn0.sig"
+    monkeypatch.setattr(
+        scitokens, "candidates", lambda *a, **k: [scitokens.Token("p", token, {"sub": "r"})]
+    )
+    monkeypatch.setattr(
+        scitokens,
+        "authenticate_daemon",
+        lambda *a, **k: scitokens.Verdict(
+            negotiated={
+                "AuthMethods": "SCITOKENS",
+                "Authentication": "YES",
+                "TrustDomain": "cern.ch",
+            },
+            status=0,
+        ),
+    )
+    assert main(["auth", "--host", "ce.example", "--token", "/dev/null"]) == 0

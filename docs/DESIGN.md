@@ -589,3 +589,30 @@ Two more facts from trying a real token (WLCG reference IAM, audience
   `1004: Failed to authenticate using SCITOKENS` without sending anything after
   the negotiation - so it declines the token locally, which points at the trust
   and audience configuration rather than at the CE.
+
+## SCITOKENS, implemented
+
+`xrdhtcondor.scitokens` presents a WLCG token to a daemon, in the shape
+`Condor_Auth_SSL` in SciTokens mode uses (`condor_io/condor_auth_ssl.cpp`):
+
+- **the token**: `SCITOKENS_FILE`, then `BEARER_TOKEN_FILE`, then one file per
+  token under `~/.condor/tokens.d/`, the JWT on a file's first non-empty line;
+  choosing prefers a token whose `aud` names the service, and the generic
+  `https://wlcg.cern.ch/jwt/v1/any` audience is accepted anywhere;
+- **the framing**: every handshake step is a CEDAR message carrying
+  `code(int status)`, `code(int length)` and that many bytes of a **TLS record**,
+  so the TLS session is multiplexed through CEDAR rather than opened on its own
+  socket. Python's `ssl.MemoryBIO` drives it, and the exchange authenticates with
+  the token, not with the daemon's certificate - which is HTCondor's own posture
+  (`SSL_VERIFY_PEER` with a callback that tolerates an unchained certificate);
+- **the token itself** goes through TLS as `[uint32 length][JWT]`.
+
+`xrdhtcondor auth --host ce503.cern.ch --sock collector` runs the whole thing, and
+`--token PATH` names the file. Two things learned by running it against CERN's CEs:
+
+- the session has to be negotiated for a command **the daemon can serve**: a
+  collector closes on `QMGMT_WRITE_CMD` (1112) and answers a query (6), so the
+  collector path uses 6 and a submission uses 1112;
+- with an expired token the collector gets through SCITOKENS and into the TLS
+  handshake, then closes - so the exchange is being attempted, and a live token is
+  what is needed to see the verdict.
