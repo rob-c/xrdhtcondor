@@ -262,3 +262,26 @@ outside host, whatever the client implements. The LHCb submit paths that *do*
 work from here are the ones already proven in this project - DIRAC (`xrdwms`,
 `xrddirac`: completed jobs) and ARC (`xrdarc`: completed job) - and HTCondor can
 be exercised end to end against a local schedd, which is what the tests do.
+
+### IC-HEP is reachable - through the collector's sock name
+
+The earlier conclusion was wrong, and the mistake was mine: that probe hand-built
+the greeting with a fixed length byte, so every variant was malformed and the
+resets proved nothing. Framed through `cedar.greeting()`, all three CEs **hold**
+the connection when the greeting names `collector`:
+
+| host | :9619 `sock=collector` | :9619 `sock=schedd` | :9618 |
+| --- | --- | --- | --- |
+| ceprod00.grid.hep.ph.ic.ac.uk | **held** | closed | refused |
+| condorce01.cern.ch | **held** | closed | closed |
+| ce503.cern.ch | **held** | closed | closed |
+
+So a CE's shared port maps `collector`, and IC-HEP needs no reachable 9618 after
+all. The schedd's own sock name is the one published by that collector.
+
+What the collector will not do is answer anonymously: a SECMAN request offering
+CLAIMTOBE gets nothing, and so does a bare `QUERY_SCHEDD_ADS`, on both CEs. A CE
+collector restricts reads, so authentication comes first - on LHCb's CEs,
+`SCITOKEN`, which is the WLCG JWT this project already acquires for XRootD. That
+is the next piece of the client: SCITOKEN over CEDAR (then GSI), and the collector
+then names the schedd so the greeting can reach it.
