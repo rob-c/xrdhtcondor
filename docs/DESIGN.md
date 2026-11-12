@@ -506,3 +506,28 @@ that it arrives before any client session packet are the only clues.
 
 Everything else is settled and measured: the CLAIMTOBE handshake, the packet
 framing, the cipher choice, the IV rule, and both halves of the AAD.
+
+## IC-HEP, measured (what it will and will not do)
+
+`ceprod00.grid.hep.ph.ic.ac.uk:9619` is reachable, and its shared port maps the
+sock name `collector`: a greeting naming it is held reliably, three times in a row,
+where `schedd` is closed immediately.
+
+The collector then answers our SECMAN request - 497 bytes, `Enact = "YES"`,
+`TrustDomain = "users.htcondor.org"` - but with an **empty `AuthMethodsList`**, and
+the query that follows gets no reply at all. Offering each method in turn says why:
+
+| offered | `AuthMethods` in the reply |
+| --- | --- |
+| `CLAIMTOBE` | `""` |
+| `GSI` | `""` |
+| `SCITOKEN` | `""` |
+| `GSI,SCITOKEN` | `""` |
+| `FS` | `"FS"` |
+
+So this CE accepts only a **filesystem** identity - the local HTCondor users of
+`users.htcondor.org` - and no grid identity at all. That is not a client-side
+problem: a GSI proxy or a WLCG token cannot authenticate here, so the schedd's sock
+name cannot be read, so the schedd cannot be reached and no job can be submitted
+over CEDAR. IC-HEP's LHCb access is through its ARC/AREX and DIRAC endpoints, which
+this project already uses successfully.
