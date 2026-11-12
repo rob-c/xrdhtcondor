@@ -173,3 +173,17 @@ Getting a real daemon to *believe* a locally minted token took these, in this or
 `asklib.py` is the diagnostic that made all of this possible: it calls
 `scitoken_deserialize`/`enforcer_create`/`enforcer_generate_acls` directly and prints
 the library's own error text, which no amount of daemon debug output revealed.
+
+### The ACL gate, and what was tried
+
+libscitokens refuses to build ACLs for a token that carries `wlcg.groups`:
+`token verification failed: 'wlcg.groups' claim verification is mandatory`. Tried
+against it and not the answer: an `/etc/scitokens/scitokens.cfg` naming the issuer
+with a `default_user`, and `SEC_SCITOKENS_ALLOW_FOREIGN_TOKEN_TYPES = TRUE` with
+`SEC_SCITOKENS_FOREIGN_TOKEN_ISSUERS = *`.
+
+The token itself is otherwise accepted - `scitoken_deserialize` returns 0 and
+`enforcer_create` succeeds - so what remains is a *policy* question the library
+answers, not a transport one: which groups this pool believes, and under what ACLs.
+That is also the point at which the testbed stops standing in for a real site, since
+a real site has exactly that configuration and this one does not.
