@@ -148,3 +148,28 @@ the system bundle that `update-ca-trust` rewrites. Making it use ours (a
 `SSL_CERT_FILE`/`CURL_CA_BUNDLE` for the daemon, or a certificate signed by an anchor
 already in its store) is the next step - and then the successful SCITOKENS *write*
 can be captured, which is what the client's handshake needs.
+
+### The token stack, as far as it now goes (measured, step by step)
+
+Getting a real daemon to *believe* a locally minted token took these, in this order:
+
+1. **https**, with a CA the daemons trust: `pki/` holds a test CA and an issuer
+   certificate, mounted at `/pki` and exported as `SSL_CERT_FILE`/`CURL_CA_BUNDLE`;
+   the anchor also has to be installed (`anchors/*.crt` + `update-ca-trust`).
+2. **`/.well-known/openid-configuration` with a `jwks_uri`** - that is the document
+   libscitokens reads.
+3. **One signing key for both the mint and the server**, kept at
+   `/tmp/token-signing.key`. A key per process gives `failed to verify signature:
+   VerifyFinal failed` because the token never matches the published JWKS.
+4. `scitoken_deserialize` then returns **0** and `enforcer_create` succeeds, so the
+   token is valid and its keys are fetched.
+5. The last gate is libscitokens' ACL step:
+   `token verification failed: 'wlcg.groups' claim verification is mandatory`.
+   HTCondor tolerates that for a "foreign token type"
+   (`SEC_SCITOKENS_ALLOW_FOREIGN_TOKEN_TYPES` with the issuer listed), which is set
+   here, and still the daemon refuses - so either that path is not reached or an ACL
+   source (`scitokens.cfg`) is expected.
+
+`asklib.py` is the diagnostic that made all of this possible: it calls
+`scitoken_deserialize`/`enforcer_create`/`enforcer_generate_acls` directly and prints
+the library's own error text, which no amount of daemon debug output revealed.

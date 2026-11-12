@@ -16,7 +16,32 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 ISSUER = "https://submit:8443"
 AUDIENCE = "https://wlcg.cern.ch/jwt/v1/any"
-KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+SIGNING_KEY = "/tmp/token-signing.key"
+
+
+def _signing_key():  # noqa: ANN202
+    """One signing key for both the mint and the server, or the JWKS never matches.
+
+    Generating a key per process was a real bug here: `mint` and the running issuer
+    each made their own, so every token failed to verify with `VerifyFinal failed`.
+    """
+    try:
+        with open(SIGNING_KEY, "rb") as handle:
+            return serialization.load_pem_private_key(handle.read(), password=None)
+    except OSError:
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        with open(SIGNING_KEY, "wb") as handle:
+            handle.write(
+                key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                )
+            )
+        return key
+
+
+KEY = _signing_key()
 NUMBERS = KEY.public_key().public_numbers()
 
 
@@ -89,7 +114,15 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _tls_context() -> ssl.SSLContext:
-    """A throwaway certificate: libscitokens wants https, and does not chain-check it."""
+    """The certificate this issuer serves: the committed one, or a throwaway.
+
+    libscitokens verifies the JWKS endpoint's TLS, so a daemon has to trust whatever
+    is used here - which is why `pki/` holds a CA and a certificate signed by it.
+    """
+    if os.path.exists("/pki/issuer.pem") and os.path.exists("/pki/issuer.key"):
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain("/pki/issuer.pem", "/pki/issuer.key")
+        return context
     import datetime
     import tempfile
 
