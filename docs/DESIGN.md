@@ -239,3 +239,26 @@ CERN's CEs are a better target: `condorce01/02.cern.ch` and `ce503.cern.ch`
 have **both** 9618 and 9619 open, so the schedd's address - and its published
 sock name - can be read from the collector, then negotiated with. That is the
 next step, and it does not depend on IC-HEP's firewalling.
+
+### The control experiment that settles it
+
+A **local** shared-port schedd was greeted three ways:
+
+| greeting names | daemon |
+| --- | --- |
+| the sock in its address file | **holds** |
+| `schedd` | closes |
+| the right sock, then a captured SECMAN request | **answers, 503 bytes** |
+
+So a shared port closes on an unknown sock name, and IC-HEP behaves identically.
+The sock name lives in the collector, and the collectors are not reachable:
+IC-HEP's 9618 refuses connections, and CERN's `condorce01`/`ce503` on 9618 and
+9619 **reset** the connection on every greeting variant tried (no sock, `schedd`,
+`collector`) - a policy refusal, not a protocol one, since a real daemon reached
+over loopback answers the same bytes.
+
+Conclusion: CEDAR submission to these CEs is blocked by network policy from an
+outside host, whatever the client implements. The LHCb submit paths that *do*
+work from here are the ones already proven in this project - DIRAC (`xrdwms`,
+`xrddirac`: completed jobs) and ARC (`xrdarc`: completed job) - and HTCondor can
+be exercised end to end against a local schedd, which is what the tests do.
