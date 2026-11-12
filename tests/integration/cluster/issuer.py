@@ -3,13 +3,13 @@
 No browser, no external IdP - which is what makes the handshake iterable.
 """
 
-import base64, json, sys, time
+import base64, json, os, ssl, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
-ISSUER = "http://127.0.0.1:8080"
+ISSUER = "https://submit:8443"
 AUDIENCE = "https://wlcg.cern.ch/jwt/v1/any"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 NUMBERS = KEY.public_key().public_numbers()
@@ -73,9 +73,41 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
 
+def _tls_context() -> ssl.SSLContext:
+    """A throwaway certificate: libscitokens wants https, and does not chain-check it."""
+    import datetime
+    import tempfile
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "submit")])
+    now = datetime.datetime.now(datetime.UTC)
+    certificate = (
+        x509.CertificateBuilder().subject_name(name).issuer_name(name)
+        .public_key(key.public_key()).serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_after(now + datetime.timedelta(hours=1))
+        .sign(key, hashes.SHA256())
+    )
+    handle, path = tempfile.mkstemp(suffix=".pem")
+    with os.fdopen(handle, "wb") as written:
+        written.write(certificate.public_bytes(serialization.Encoding.PEM))
+        written.write(key.private_bytes(serialization.Encoding.PEM,
+                                        serialization.PrivateFormat.PKCS8,
+                                        serialization.NoEncryption()))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(path)
+    return context
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "mint":
         print(mint())
     else:
+        server = HTTPServer(("0.0.0.0", 8443), Handler)
+        server.socket = _tls_context().wrap_socket(server.socket, server_side=True)
         print(f"issuer on {ISSUER}", flush=True)
-        HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+        server.serve_forever()

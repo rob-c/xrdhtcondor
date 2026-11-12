@@ -109,3 +109,21 @@ Two things this taught, both worth keeping:
 - The real client sends its SECMAN request and then the query in clear on the same
   connection when the daemon authorises anonymously, which is what the capture of
   a read looks like.
+
+### What the token stack needs, learned the hard way
+
+- **https, not http.** With an `http` issuer the *client* silently drops the method
+  (`HANDSHAKE: client sent (methods == 0)`); serving the same JWKS over https makes
+  it offer SCITOKENS properly. `issuer.py` therefore wraps itself in TLS with a
+  throwaway certificate.
+- **`scitokens-cpp` on both ends**, or the method is excluded before it is offered.
+- **Reads do not authenticate**: a `condor_status` against an open pool says nothing.
+- A collector query is a **READ**, so SCITOKENS has to be in `SEC_READ_*` as well as
+  `SEC_DEFAULT_*`, or the daemon's offer comes back empty.
+
+With those in place the real client offers the method and the daemon attempts the
+validation, failing with `AUTHENTICATE: method 4096 (SCITOKENS) failed` and no
+further detail at `D_SECURITY|D_FULLDEBUG`. That last failure is the open item:
+either libscitokens cannot verify our self-signed JWKS endpoint, or it dislikes a
+claim. The quickest way to see its reason is to call `scitoken_deserialize`
+directly in a container against a minted token.
