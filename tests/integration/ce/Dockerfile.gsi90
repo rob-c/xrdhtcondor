@@ -1,0 +1,31 @@
+# A real HTCondor client that can still speak GSI: 10.0 on AlmaLinux 8.
+# (On el9 the GSI method is gone, and a policy asking for it is simply invalid.)
+#
+# `condor` hard-depends on python3-condor, whose boost-python3 is missing on
+# el8/aarch64; the binaries do not need it, so the package is installed with
+# --nodeps rather than left out.
+FROM almalinux:8
+
+RUN dnf install -y -q --nogpgcheck tcpdump procps iproute \
+        https://htcss-downloads.chtc.wisc.edu/repo/9.0/htcondor-release-current.el8.noarch.rpm \
+    && dnf install -y -q --nogpgcheck condor-classads condor-procd \
+    && dnf download -q --nogpgcheck --destdir /tmp condor \
+    && rpm -i --nodeps /tmp/condor-*.rpm \
+    && dnf clean all \
+    && /usr/bin/condor_version | head -1
+
+RUN printf '%s\n' \
+    'CONDOR_HOST = 127.0.0.1' \
+    'SEC_CLIENT_AUTHENTICATION = REQUIRED' \
+    'SEC_CLIENT_AUTHENTICATION_METHODS = GSI' \
+    'SEC_DEFAULT_AUTHENTICATION_METHODS = GSI' \
+    'SEC_CLIENT_ENCRYPTION = OPTIONAL' \
+    'SEC_CLIENT_INTEGRITY = OPTIONAL' \
+    'GSI_DAEMON_DIRECTORY = /etc/grid-security/certificates' \
+    'USE_SHARED_PORT = FALSE' \
+    'TOOL_DEBUG = D_SECURITY D_FULLDEBUG D_PROTOCOL' \
+    'TOOL_DEBUG_LOG = /tmp/tool.log' \
+    > /etc/condor/config.d/99-client.config
+
+WORKDIR /work
+ENTRYPOINT ["/bin/bash"]
