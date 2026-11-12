@@ -19,7 +19,7 @@ AUDIENCE = "https://wlcg.cern.ch/jwt/v1/any"
 SIGNING_KEY = "/tmp/token-signing.key"
 
 
-def _signing_key():  # noqa: ANN202
+def _signing_key():
     """One signing key for both the mint and the server, or the JWKS never matches.
 
     Generating a key per process was a real bug here: `mint` and the running issuer
