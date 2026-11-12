@@ -439,3 +439,26 @@ def test_the_socket_wiring_sends_a_greeting_then_negotiates(
     with pytest.raises(scitokens.SciTokenError, match="did not offer SCITOKENS"):
         scitokens.authenticate_daemon("ce.example", "collector", token)
     assert connection.sent.startswith(cedar.greeting("collector"))
+
+
+def test_a_daemon_that_enacts_a_session_is_named_as_the_reason() -> None:
+    """An enacted session is why a clear-text exchange would be ignored - say so."""
+
+    class _Enacting:
+        def send(self, _payload: bytes) -> None:
+            return None
+
+        def receive(self) -> bytes:
+            return cedar.frame(
+                cedar.put_classad(
+                    {
+                        "AuthMethods": "SCITOKENS",
+                        "Authentication": "YES",
+                        "Enact": "YES",
+                        "Encryption": "YES",
+                    }
+                )
+            )
+
+    with pytest.raises(scitokens.SciTokenError, match="enacted an encrypted session"):
+        scitokens.negotiate(_Enacting(), scitokens.Token("p", _jwt(), {}))

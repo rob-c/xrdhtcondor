@@ -616,3 +616,27 @@ Two more facts from trying a real token (WLCG reference IAM, audience
 - with an expired token the collector gets through SCITOKENS and into the TLS
   handshake, then closes - so the exchange is being attempted, and a live token is
   what is needed to see the verdict.
+
+## Why a clear-text SCITOKENS exchange dies (measured)
+
+Against `condorce01.cern.ch`, a SCITOKENS negotiation is answered with:
+
+```
+AuthMethods = "SCITOKENS"   Authentication = "YES"   Encryption = "YES"
+Integrity = "YES"           Enact = "YES"            CryptoMethods = "AES"
+```
+
+`Enact = "YES"` with `Encryption = "YES"` means **everything after SECMAN is the
+enacted session**, AES-GCM under the ECDH-derived key. That includes the SciTokens
+handshake, whose TLS records travel inside CEDAR messages: sent in clear, the daemon
+reads one ClientHello-shaped message and closes. Tried and excluded as causes:
+every status code (`A_OK`, `SENDING`, `RECEIVING`, `HOLDING`, `ROLE_CLIENT`), TLS 1.2
+alone, an unrestricted cipher list, and presenting the LHCb proxy as a client
+certificate - all closed after the first message.
+
+So the session layer is not one blocker among several: it is *the* blocker for every
+authenticated conversation with a real CE, tokens included. `crypto.py` already has
+the cipher, the IV rule and the measured AAD; what is missing is the wiring that
+seals outgoing frames and opens incoming ones once SECMAN says `Enact`.
+
+Until then, `xrdhtcondor auth` says exactly that rather than failing obscurely.

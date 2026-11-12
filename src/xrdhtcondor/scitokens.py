@@ -334,6 +334,14 @@ def negotiate(
     if not reply:
         raise SciTokenError("the daemon closed the connection before negotiating")
     merged = _classads_of(reply)
+    if str(merged.get("Enact") or "").upper() in {"YES", "TRUE"} and str(
+        merged.get("Encryption") or ""
+    ).upper() in {"YES", "TRUE"}:
+        raise SciTokenError(
+            "the daemon enacted an encrypted session (Enact/Encryption = YES), so the"
+            " token exchange has to be sealed with the session key; this client does not"
+            " implement that session yet, and the daemon will ignore anything sent in clear"
+        )
     if merged.get("AuthMethods") != "SCITOKENS":
         raise SciTokenError(
             "the daemon did not offer SCITOKENS: it said "
