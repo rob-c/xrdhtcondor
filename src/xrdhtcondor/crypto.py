@@ -126,12 +126,15 @@ class PacketCodec:
 
 
 def _packet_iv(base: bytes, counter: int) -> bytes:
-    """``base``'s first four bytes plus ``counter``, then the rest of ``base``."""
+    """The packet counter in the first four bytes, then the rest of ``base``.
+
+    ``Condor_Crypt_AESGCM`` copies the counter into the IV's first four bytes and
+    keeps the base IV from there on - it does not add to what is already there, so
+    the first packet's IV begins with four zero bytes.
+    """
     if counter > 0xFFFFFFFF:
         raise ValueError("a connection has run out of packet counters")
-    start = struct.unpack(">I", base[:_IV_COUNTER])[0]
-    bumped = (start + counter) & 0xFFFFFFFF
-    return struct.pack(">I", bumped) + base[_IV_COUNTER:]
+    return struct.pack(">I", counter) + base[_IV_COUNTER:]
 
 
 def _aad(header: bytes, handshake: bytes, first: bool) -> bytes:

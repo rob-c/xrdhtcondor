@@ -425,3 +425,22 @@ were `01 00 00 00 28` - type 1 and a length of 40, which is exactly the sealed s
 of an 8-byte `code(int)` with a 16-byte IV and a 16-byte tag. So the packet shape
 and its length are right, the AAD rule is now known exactly, and what is left is
 the key and IV derivation inside the session.
+
+### Two more corrections the pool forced
+
+1. **The IV's head is replaced, not added to.** `Condor_Crypt_AESGCM::encrypt`
+   copies the packet counter into the IV's first four bytes and keeps the base
+   IV's tail (`memcpy(iv, &ctr_encoded, 4); memcpy(iv + 4, base + 4, 12)`), so the
+   first packet's IV begins with four zero bytes. Our codec added the counter to
+   the base IV's own head, which changes every packet's IV.
+2. **The daemon chooses the cipher, and it does not choose AES by default.** When
+   the request offered `AES,BLOWFISH,3DES`, the schedd's session info said
+   `CryptoMethods = "BLOWFISH"` - we would have been sealing AES-GCM packets into a
+   session that agreed to Blowfish. Offering only `AES` makes the negotiation say
+   `CryptoMethods = "AES"`, matching what `crypto.py` implements.
+
+With the digest rule measured, the framing confirmed and the cipher pinned, the
+next failure can be attributed: the sealed `InitializeConnection` still gets no
+reply, so what remains is inside the key derivation (the ECDH secret through
+`Condor_Crypt_Base::hkdf`, salt `"htcondor"`, info `"keygen"`, which is what
+`condor_secman.cpp` calls) or the digest contexts' starting point.
