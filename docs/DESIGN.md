@@ -640,3 +640,19 @@ the cipher, the IV rule and the measured AAD; what is missing is the wiring that
 seals outgoing frames and opens incoming ones once SECMAN says `Enact`.
 
 Until then, `xrdhtcondor auth` says exactly that rather than failing obscurely.
+
+## The session, wired (`xrdhtcondor.session`)
+
+`session.Session` seals and opens what a daemon enacts after SECMAN:
+
+- a frame is `[0x01][uint32 sealed size][payload]`, and the payload is
+  `[base IV, first packet][ciphertext][tag]`;
+- the header that is authenticated is the one that goes on the wire, with the
+  **sealed** size in it - computing it after sealing is what made the first attempt
+  fail with `InvalidTag`;
+- the AAD is the running digest of the conversation: every frame sent before this
+  one, then every frame received before it (neither includes the greeting), and on
+  the first packet in each direction those two 32-byte digests precede the header.
+
+The pair is exercised both ways in the tests, including a tampered packet, a packet
+out of order, and a stranger's key.
