@@ -67,3 +67,18 @@ after it travel **encrypted**. There is no plaintext queue-manager exchange to
 imitate, which is why `probe_qmgmt.py` reaches `InitializeConnection` and stops.
 `crypto.py` holds the cipher; `probe_session.py` is where the framing is being
 settled, with this pool as the oracle.
+
+## The session, as far as it goes
+
+`probe_session.py` establishes what the pool will do and what it will not:
+
+| step | outcome |
+| --- | --- |
+| negotiation with `Authentication = "REQUIRED"` | `YES`/`YES`/`YES`, `Enact = "YES"`, **and its ECDH key** |
+| session key from the shared secret | 32 bytes, HKDF as `crypto.py` derives it |
+| one sealed packet (identity), header length = sealed size | the daemon closes |
+
+So the key exchange works and the remaining fault is inside the first sealed
+packet: the running-digest AAD (which traffic is hashed, and how the two digests
+are ordered) or the header's length and type. Everything above it - query, address,
+greeting, negotiation, QMGMT framing - is now proven against this pool.
