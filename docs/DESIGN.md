@@ -678,3 +678,34 @@ So `xrdhtcondor`'s token support is complete as far as a client can take it: fin
 a token, choosing one by audience, negotiating SCITOKENS, and sealing the exchange
 when the daemon enacts a session. What it cannot do is make a site trust an issuer it
 does not trust.
+
+## The pool can now take tokens, and that isolates the real fault
+
+The testbed pool is configured to accept WLCG reference-IAM tokens
+(`SCITOKENS_SERVER_AUDIENCE`, `SEC_SCITOKENS_FOREIGN_TOKEN_ISSUERS`, and SCITOKENS
+added to the READ/WRITE classes - a collector query is a READ, which is why adding
+it only to DEFAULT changed nothing). With that, the pool's collector answers
+
+```
+AuthMethods = "SCITOKENS"  Authentication = "YES"  Enact = "YES"  Encryption = "YES"
+```
+
+and a live WLCG-IAM token was offered to it. **The pool dropped the exchange too**,
+and its own log says where:
+
+```
+HANDSHAKE: in handshake(my_methods = 'SCITOKENS')
+HANDSHAKE: handshake() - i am the server
+AUTHENTICATE: handshake failed!
+DC_AUTHENTICATE: required authentication of ... failed: AUTHENTICATE:1002
+```
+
+That is the finding of the day: the fault is **ours**, not the sites' trust policy.
+Against a site we could never be sure whether a refusal was the token or the
+handshake; against the pool there is no doubt. Tried against the pool and *not* the
+cause: the first message's status (AOK/SENDING/RECEIVING), TLS 1.2 alone, and a
+plain self-signed client certificate.
+
+What is left is the TLS-inside-CEDAR handshake itself, and it can now be iterated
+locally: the pool gives both ends and its log says exactly when `SSL_accept` gives
+up.
