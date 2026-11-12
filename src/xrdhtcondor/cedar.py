@@ -115,6 +115,39 @@ def greeting(sock: str, subsystem: str = SUBSYSTEM) -> bytes:
     )
 
 
+#: ``DC_AUTHENTICATE``, the command that precedes a SECMAN classad
+#: (``condor_commands.h``: ``DC_BASE`` 60000 plus 10).
+DC_AUTHENTICATE = 60010
+
+
+def code_int(value: int) -> bytes:
+    """``code(int)``: four pad bytes, then a big-endian int32.
+
+    A 64-bit Condor sends an ``int`` as a four-byte value sign-extended to eight,
+    which is why ``DC_AUTHENTICATE`` (234) arrives as
+    ``00 00 00 00 00 00 00 ea``.
+    """
+    if not -0x80000000 <= value <= 0xFFFFFFFF:
+        raise CedarError(f"{value} does not fit in a four-byte code(int)")
+    return bytes(4) + struct.pack(">I", value & 0xFFFFFFFF)
+
+
+def security_message(attributes: Mapping[str, Any]) -> bytes:
+    """A SECMAN message: the ``DC_AUTHENTICATE`` command, then the classad."""
+    return code_int(DC_AUTHENTICATE) + put_classad(attributes)
+
+
+def put_classad(attributes: Mapping[str, Any]) -> bytes:
+    """A classad in the wire form: the count, the pairs, then two empty strings.
+
+    ``putClassAd`` writes ``code(numExprs)``, then each ``name = expr``
+    NUL-terminated, then ``put("")`` twice for the absent ``MyType`` and
+    ``TargetType`` - which the capture shows as three NULs ending the payload.
+    """
+    body = wire_classads(attributes)
+    return code_int(len(attributes)) + body + b"\x00\x00"
+
+
 def wire_classads(attributes: Mapping[str, Any]) -> bytes:
     """``attributes`` in the wire form: ``name = value`` pairs, NUL-separated."""
     if any("\x00" in name for name in attributes):
@@ -218,6 +251,9 @@ class SecurityRequest:
     command: int = 1112
     subsystem: str = SUBSYSTEM
     session_duration: str = "60"
+    #: The server's pid and trust domain, when a previous session named them.
+    server_pid: int = 0
+    trust_domain: str = ""
 
     def as_classads(self) -> dict[str, Any]:
         """The request as the attributes the capture shows."""
@@ -226,6 +262,8 @@ class SecurityRequest:
             "NewSession": "YES",
             "AuthMethods": self.auth_methods,
             "Integrity": self.integrity,
+            "ServerPid": self.server_pid,
+            "TrustDomain": self.trust_domain,
             "RemoteVersion": self.remote_version,
             "CryptoMethods": self.crypto_methods,
             "OutgoingNegotiation": self.integrity,

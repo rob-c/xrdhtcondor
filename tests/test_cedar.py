@@ -156,3 +156,39 @@ def test_the_second_connection_announces_a_qmgmt_command() -> None:
     assert attributes["Command"] == 421
     assert attributes["ConnectSinful"].startswith("<172.17.0.2:37973")
     assert cedar.parse_wire_classads(NONCE[5:])["Nonce"]
+
+
+def test_a_secman_message_reproduces_the_capture_exactly() -> None:
+    """The encoder is proven by writing the captured message back, byte for byte.
+
+    The count prefix, the ``name = value`` pairs and the two trailing empties are
+    what ``putClassAd`` writes; the command in front is ``DC_AUTHENTICATE``, which
+    is ``DC_BASE`` 60000 plus 10. Getting either wrong makes a schedd stay silent
+    while it answers a real client's bytes.
+    """
+    captured = _captured()[1][5:]
+    assert cedar.security_message(cedar.parse_wire_classads(captured)) == captured
+
+
+def test_the_command_before_a_classad_is_dc_authenticate() -> None:
+    """60010, as an eight-byte ``code(int)``: four pad bytes and a big-endian int32."""
+    assert cedar.DC_AUTHENTICATE == 60010
+    assert cedar.code_int(cedar.DC_AUTHENTICATE) == bytes.fromhex("000000000000ea6a")
+
+
+def test_a_count_prefix_and_two_empties_frame_a_classad() -> None:
+    """``putClassAd``: the count, the pairs, then ``MyType`` and ``TargetType``."""
+    written = cedar.put_classad({"A": 1})
+    assert written == cedar.code_int(1) + b"A = 1\x00" + b"\x00\x00"
+
+
+@pytest.mark.parametrize("value", [-(2**31), 2**32 - 1])
+def test_code_int_accepts_a_four_byte_range(value: int) -> None:
+    """The two ends of what a four-byte ``code(int)`` can carry."""
+    assert len(cedar.code_int(value)) == 8
+
+
+def test_code_int_refuses_a_value_that_does_not_fit() -> None:
+    """A number wider than four bytes would be written as a different int."""
+    with pytest.raises(cedar.CedarError, match="does not fit"):
+        cedar.code_int(2**32)
