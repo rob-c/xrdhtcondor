@@ -259,10 +259,11 @@ def sealed_exchange(framed: Any, formed: Any) -> Callable[[bytes], bytes]:
 
     def step(records: bytes) -> bytes:
         framed.send(formed.seal(message(RECEIVING, records)))
-        answer = framed.receive()
+        answer: bytes = framed.receive()
         if not answer:
             raise SciTokenError("the daemon closed the connection inside the session")
-        return formed.open(answer)
+        opened: bytes = formed.open(answer)
+        return opened
 
     return step
 

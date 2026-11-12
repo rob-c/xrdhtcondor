@@ -134,29 +134,41 @@ def _jobs(args: Any) -> int:
     return OK
 
 
+def _listed(args: Any) -> int:
+    """``auth --list``: the tokens this session would offer, and where they came from."""
+    from . import scitokens
+
+    found = scitokens.candidates()
+    if not found and not args.quiet:
+        output.message("no tokens found: set SCITOKENS_FILE or put one in ~/.condor/tokens.d")
+    for token in found:
+        said = str(token.claims.get("sub") or "")
+        output.record("token", path=token.path, issuer=token.issuer, subject=said)
+        if not args.quiet:
+            output.message(
+                f"{token.path}\n  issuer  : {token.issuer}\n"
+                f"  subject : {said}\n  audience: {' '.join(token.audiences)}"
+            )
+    return OK
+
+
+def _named_token(args: Any, scitokens: Any) -> Any:
+    """The token named by ``--token``, or ``None`` to use the usual search."""
+    if not args.token:
+        return None
+    found = scitokens.candidates({"SCITOKENS_FILE": args.token})
+    return found[0] if found else None
+
+
 def _auth(args: Any) -> int:
     """``auth``: greet a daemon, offer SCITOKENS, and say what it decided."""
     from . import scitokens
 
     if args.list:
-        found = scitokens.candidates()
-        for token in found:
-            said = str(token.claims.get("sub") or "")
-            output.record("token", path=token.path, issuer=token.issuer, subject=said)
-            if not args.quiet:
-                output.message(
-                    f"{token.path}\n  issuer  : {token.issuer}\n"
-                    f"  subject : {said}\n  audience: {' '.join(token.audiences)}"
-                )
-        if not found and not args.quiet:
-            output.message("no tokens found: set SCITOKENS_FILE or put one in ~/.condor/tokens.d")
-        return OK
-    named: scitokens.Token | None = None
-    if args.token:
-        found = scitokens.candidates({"SCITOKENS_FILE": args.token})
-        if not found:
-            return _fail(f"no token in {args.token}")
-        named = found[0]
+        return _listed(args)
+    named = _named_token(args, scitokens)
+    if args.token and named is None:
+        return _fail(f"no token in {args.token}")
     try:
         verdict = scitokens.authenticate_daemon(
             args.host, args.sock, named, port=args.port, command=args.command
