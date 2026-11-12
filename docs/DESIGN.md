@@ -444,3 +444,22 @@ next failure can be attributed: the sealed `InitializeConnection` still gets no
 reply, so what remains is inside the key derivation (the ECDH secret through
 `Condor_Crypt_Base::hkdf`, salt `"htcondor"`, info `"keygen"`, which is what
 `condor_secman.cpp` calls) or the digest contexts' starting point.
+
+### What is *not* the fault (checked in the source, one by one)
+
+- **The key exchange**: `SecMan::EncodePubkey` base64s `i2d_PublicKey`, and the
+  capture's value decodes to a 65-byte uncompressed point, which is what our client
+  sends and what `from_encoded_point` reads. `o2i_ECPublicKey`/`d2i_PublicKey`
+  accept exactly that.
+- **The derivation**: `Condor_Crypt_Base::hkdf` calls
+  `Condor_Auth_Passwd::hkdf` with salt `"htcondor"` and info `"keygen"`, which is
+  `EVP_PKEY_HKDF` with SHA-256 - the same construction `crypto.py` implements.
+- **The cipher**: pinned to `AES` by asking for `AES` alone, so the session says
+  `CryptoMethods = "AES"` and `EVP_aes_256_gcm()` applies.
+- **The AAD and the framing**: measured from `D_NETWORK`, byte-exactly.
+
+So the sealed `InitializeConnection` failing is none of the obvious things. The two
+candidates left are *when* the digest contexts start (the measured match fixes the
+client's own digest, not the daemon's half of the AAD) and the session binding: a
+queue-manager connection may have to name the `Sid` the negotiation returned before
+its commands are honoured.
