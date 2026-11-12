@@ -8,7 +8,7 @@ FROM almalinux:8
 
 RUN dnf install -y -q --nogpgcheck tcpdump procps iproute \
         https://htcss-downloads.chtc.wisc.edu/repo/10.0/htcondor-release-current.el8.noarch.rpm \
-    && dnf install -y -q --nogpgcheck condor-classads condor-procd \
+    && dnf install -y -q --nogpgcheck condor-classads condor-procd scitokens-cpp \
     && dnf download -q --nogpgcheck --destdir /tmp condor \
     && rpm -i --nodeps /tmp/condor-*.rpm \
     && dnf clean all \

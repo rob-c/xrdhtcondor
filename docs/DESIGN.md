@@ -558,3 +558,34 @@ So the wall is not reachability and not framing: these CEs will not authenticate
 outside client at all, which means the collector never names its schedd and the
 schedd is never reachable. Submitting to one of them over CEDAR requires the CE to
 be configured to accept GSI or SCITOKEN from outside, which is a site decision.
+
+## Correction: the token method is `SCITOKENS`, and the CEs do support it
+
+The survey above offered `GSI`, `SCITOKEN` and `CLAIMTOBE`, got an empty
+`AuthMethodsList` from every CE, and concluded that none of them would authenticate
+an outside client. That conclusion was wrong, and the mistake was the method name:
+it is **`SCITOKENS`**, with an S.
+
+Asking for that name is answered properly:
+
+| CE | reply |
+| --- | --- |
+| condorce01.cern.ch | `AuthMethods = "SCITOKENS"`, `AuthMethodsList = "SCITOKENS"`, `TrustDomain = "cern.ch"` |
+| ce503.cern.ch | the same |
+
+So CERN's CEs advertise token authentication to an outside client, and this client
+selects it correctly in its SECMAN request. What is not done is the *handshake*
+that follows: presenting the JWT.
+
+Two more facts from trying a real token (WLCG reference IAM, audience
+`https://wlcg.cern.ch/jwt/v1/any`, scope `storage.stage:/ wlcg.groups`, groups
+`/wlcg` and `/wlcg/pilots`, `sub` a UUID with no username claim):
+
+- HTCondor 9.0.17 needs `scitokens-cpp` (`libSciTokens.so.0`) to offer the method
+  at all - without it the client silently excludes SCITOKENS and reports
+  `1003: Failed to authenticate with any method`, which reads like a server
+  refusal and is not one.
+- With the library, the client offers SCITOKENS and stops at
+  `1004: Failed to authenticate using SCITOKENS` without sending anything after
+  the negotiation - so it declines the token locally, which points at the trust
+  and audience configuration rather than at the CE.
