@@ -531,3 +531,30 @@ problem: a GSI proxy or a WLCG token cannot authenticate here, so the schedd's s
 name cannot be read, so the schedd cannot be reached and no job can be submitted
 over CEDAR. IC-HEP's LHCb access is through its ARC/AREX and DIRAC endpoints, which
 this project already uses successfully.
+
+## A survey of LHCb-relevant HTCondor-CEs, from outside
+
+Eight reachable CEs, each greeted with `sock=collector` and offered `GSI,SCITOKEN`
+in a SECMAN request for a collector query:
+
+| CE | trust domain | reply | `AuthMethods` |
+| --- | --- | --- | --- |
+| condorce01.cern.ch | cern.ch | 486 B | `""` |
+| ce503.cern.ch | cern.ch | 486 B | `""` |
+| ce15.pic.es | pic.es | 756 B | `""` |
+| htcondor-ce-1-kit.gridka.de | ce.gridka.de | 491 B | `""` |
+| htc01.ppgrid1.rhul.ac.uk | cm.cluster | 756 B | `""` |
+| lcgce02.phy.bris.ac.uk | phy.bris.ac.uk | 791 B | `""` |
+| hepcondor.ph.liv.ac.uk | ph.liv.ac.uk | 493 B | `""` |
+| ceprod00.grid.hep.ph.ic.ac.uk | users.htcondor.org | 497 B | `""` |
+
+Every one of them negotiates: `Enact = "YES"`, `Encryption = "YES"`,
+`CryptoMethods = "AES"`, and an ECDH key comes back (CERN's run HTCondor 25.0.14,
+so the pool's 23.0.28 is not the issue). Not one selects a method, whether the
+request says `OPTIONAL` or `REQUIRED`, and whatever is offered - `GSI`, `SCITOKEN`,
+both, or `CLAIMTOBE`.
+
+So the wall is not reachability and not framing: these CEs will not authenticate an
+outside client at all, which means the collector never names its schedd and the
+schedd is never reachable. Submitting to one of them over CEDAR requires the CE to
+be configured to accept GSI or SCITOKEN from outside, which is a site decision.
