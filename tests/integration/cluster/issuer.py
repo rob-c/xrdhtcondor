@@ -3,11 +3,16 @@
 No browser, no external IdP - which is what makes the handshake iterable.
 """
 
-import base64, json, os, ssl, sys, time
+import base64
+import json
+import os
+import ssl
+import sys
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 ISSUER = "https://submit:8443"
 AUDIENCE = "https://wlcg.cern.ch/jwt/v1/any"
@@ -56,7 +61,7 @@ def mint(subject: str = "rcurrie", lifetime: int = 3600) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path.rstrip("/") in ("/.well-known/openid-configuration", "/openid-configuration"):
             # What libscitokens actually reads: an OpenID configuration naming the JWKS.
             body = json.dumps(
@@ -89,15 +94,17 @@ def _tls_context() -> ssl.SSLContext:
     import tempfile
 
     from cryptography import x509
-    from cryptography.hazmat.primitives import serialization
     from cryptography.x509.oid import NameOID
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "submit")])
     now = datetime.datetime.now(datetime.UTC)
     certificate = (
-        x509.CertificateBuilder().subject_name(name).issuer_name(name)
-        .public_key(key.public_key()).serial_number(x509.random_serial_number())
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=5))
         .not_valid_after(now + datetime.timedelta(hours=1))
         # A trust anchor, so a daemon can be told to believe this endpoint.
@@ -107,9 +114,13 @@ def _tls_context() -> ssl.SSLContext:
     handle, path = tempfile.mkstemp(suffix=".pem")
     with os.fdopen(handle, "wb") as written:
         written.write(certificate.public_bytes(serialization.Encoding.PEM))
-        written.write(key.private_bytes(serialization.Encoding.PEM,
-                                        serialization.PrivateFormat.PKCS8,
-                                        serialization.NoEncryption()))
+        written.write(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
     # The certificate is also written where a daemon's trust store can be given it:
     # libscitokens verifies the JWKS endpoint's TLS ("SSL peer certificate ... not OK"
     # is what it says otherwise).
