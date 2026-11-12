@@ -47,7 +47,7 @@ def test_several_messages_keep_their_order_and_their_keys() -> None:
 def test_a_packet_out_of_order_is_refused() -> None:
     """The counter is the IV: a swapped packet does not authenticate."""
     here, there = _pair()
-    first, second = here.seal(b"one"), here.seal(b"two")
+    _first, second = here.seal(b"one"), here.seal(b"two")
     # Out of order, the second packet is read as the first, and its IV is not there.
     with pytest.raises((InvalidTag, ValueError)):
         there.open(second)
