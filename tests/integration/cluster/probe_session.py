@@ -15,7 +15,6 @@ import socket
 import subprocess
 import sys
 
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -111,7 +110,7 @@ def main() -> int:
         try:
             got = conn.recv(65536)
             print(f"  session reply: {len(got)} bytes {got[:24]!r}")
-        except socket.timeout:
+        except TimeoutError:
             print("  session reply: none")
         print("  (a reply here means the pool decrypted our first session packet)")
     return 0
