@@ -379,3 +379,28 @@ them, "handshake", is a misnomer: they are the connection's own history.
 `probe_session.py` sent 64 zero bytes on the wire before the header, which is
 wrong twice over - those bytes are not sent at all, and their content must be the
 real digests. That is the correction to make before the session can open.
+
+## The CLAIMTOBE handshake, from a captured submit
+
+After the SECMAN classads, authentication is a handful of plain integers, and the
+capture shows both directions:
+
+| direction | messages |
+| --- | --- |
+| client | `int 2`, then `int 1` and its user name with a NUL |
+| schedd | `int 2`, `int 1`, `int 0` |
+
+`Condor_Auth_Claim::authenticate` (`condor_auth_claim.cpp`) explains the second
+client message: `code(retval = 1)` then `code(myUser)`, and the user is
+`my_username()` unless `SEC_CLAIMTOBE_USER` says otherwise. Ours had been sending
+the identity *without* the preceding `int 2`, which is why the schedd logged
+`AUTHENTICATE: handshake failed!` and closed.
+
+With the order right, the pool accepts the claim - `the schedd answered [2, 1, 0]`
+and `accepted the claim as 'root'`. That is a mapped user, which is exactly what
+`QMGMT_WRITE_CMD` demands.
+
+What follows is the enacted session: a plaintext `InitializeConnection` after the
+handshake gets nothing at all, and the capture's next frames are ciphertext. So the
+session cipher is the last piece of a submit, and everything before it - greeting,
+negotiation, identity, mapped user - now works against a real schedd.
