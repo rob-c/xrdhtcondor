@@ -1,0 +1,28 @@
+# Three nodes of one HTCondor pool. `docker compose up -d`, then
+# `docker compose exec submit condor_q` shows the pool.
+services:
+  cm:
+    build:
+      context: ../../..
+      dockerfile: tests/integration/cluster/Dockerfile
+    image: xrdhtcondor-testbed:latest
+    hostname: cm
+    volumes:
+      - ./config/98-testbed-common.config:/etc/condor/config.d/98-testbed-common.config:ro
+      - ./config/10-cm.config:/etc/condor/config.d/99-node.config:ro
+
+  submit:
+    image: xrdhtcondor-testbed:latest
+    hostname: submit
+    depends_on: [cm]
+    volumes:
+      - ./config/98-testbed-common.config:/etc/condor/config.d/98-testbed-common.config:ro
+      - ./config/20-submit.config:/etc/condor/config.d/99-node.config:ro
+
+  execute:
+    image: xrdhtcondor-testbed:latest
+    hostname: execute
+    depends_on: [cm]
+    volumes:
+      - ./config/98-testbed-common.config:/etc/condor/config.d/98-testbed-common.config:ro
+      - ./config/30-execute.config:/etc/condor/config.d/99-node.config:ro
