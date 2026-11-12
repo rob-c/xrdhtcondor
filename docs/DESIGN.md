@@ -285,3 +285,32 @@ collector restricts reads, so authentication comes first - on LHCb's CEs,
 `SCITOKEN`, which is the WLCG JWT this project already acquires for XRootD. That
 is the next piece of the client: SCITOKEN over CEDAR (then GSI), and the collector
 then names the schedd so the greeting can reach it.
+
+## What a real collector query looks like (captured inside the testbed pool)
+
+A `tcpdump` of `condor_status -schedd` against the pool, with the pool negotiating
+`Encryption = "NO"`, gives the whole exchange in the clear:
+
+- the SECMAN request for a query carries `Command = 6`, `Subsystem = "TOOL"`,
+  `Integrity`/`Encryption`/`Authentication` all `OPTIONAL`,
+  `OutgoingNegotiation = "PREFERRED"`, `TrustDomain`, `ServerPid`, a session
+  lease and an ECDH key - eighteen attributes in all;
+- the reply has three parts: the SECMAN classad, a result classad
+  (`ReturnCode = "AUTHORIZED"`, `Sid = "cm:40:1794443770:19"`, `ValidCommands`,
+  `User`), then the **ads themselves**;
+- the query classad is `TargetType = "Scheduler"`, `MyType = "Query"`,
+  `Requirements = true`, `Projection = "Machine MyAddress Name"`.
+
+Two things we got wrong and now know:
+
+1. `SecurityRequest` sent `OutgoingNegotiation` as the *integrity* value, and
+   defaulted every verdict to `REQUIRED`. A real client sends `PREFERRED` and
+   `OPTIONAL`, and a server reconciles against what it is given. Both fixed.
+2. Our query returns **zero ads**, and the collector's own D_FULLDEBUG says why:
+   `matched=0; skipped=1; filter_private_attrs=1`,
+   `User = unauthenticated@unmapped`. An unauthenticated query is not shown the
+   schedd's ad. Authentication has to come first: CLAIMTOBE clients send their
+   claimed identity straight after the negotiation (`code(int 1)` then the name
+   with a NUL, as segment 5 of the capture shows). Our attempt at that frame is
+   refused and resets the connection, so its exact shape - or the point in the
+   exchange at which it belongs - is still open.

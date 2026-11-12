@@ -192,3 +192,17 @@ def test_code_int_refuses_a_value_that_does_not_fit() -> None:
     """A number wider than four bytes would be written as a different int."""
     with pytest.raises(cedar.CedarError, match="does not fit"):
         cedar.code_int(2**32)
+
+
+def test_the_negotiation_verdicts_are_the_ones_a_client_sends() -> None:
+    """A real client offers OPTIONAL verdicts and PREFERRED negotiation.
+
+    Ours once defaulted every verdict to REQUIRED and sent the integrity value as
+    ``OutgoingNegotiation``; a server reconciles against what it is given, so both
+    are the difference between a session and silence.
+    """
+    attributes = cedar.SecurityRequest().as_classads()
+    assert attributes["Authentication"] == "OPTIONAL"
+    assert attributes["Encryption"] == "OPTIONAL"
+    assert attributes["Integrity"] == "OPTIONAL"
+    assert attributes["OutgoingNegotiation"] == "PREFERRED"

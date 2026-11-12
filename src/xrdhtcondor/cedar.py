@@ -240,8 +240,11 @@ class SecurityRequest:
     #: The ciphers offered.
     crypto_methods: str = "AES,BLOWFISH,3DES"
     #: ``REQUIRED``/``OPTIONAL``/``NEVER`` per attribute, as the capture spells them.
-    encryption: str = "REQUIRED"
-    integrity: str = "REQUIRED"
+    encryption: str = "OPTIONAL"
+    integrity: str = "OPTIONAL"
+    authentication: str = "OPTIONAL"
+    #: How far the client will go to negotiate: a real client says PREFERRED.
+    outgoing_negotiation: str = "PREFERRED"
     #: The client's own version string, exactly as HTCondor writes it.
     remote_version: str = ""
     #: This end's ECDH public key, base64 of the uncompressed point.
@@ -266,9 +269,9 @@ class SecurityRequest:
             "TrustDomain": self.trust_domain,
             "RemoteVersion": self.remote_version,
             "CryptoMethods": self.crypto_methods,
-            "OutgoingNegotiation": self.integrity,
+            "OutgoingNegotiation": self.outgoing_negotiation,
             "SessionLease": 3600,
-            "Authentication": "REQUIRED",
+            "Authentication": self.authentication,
             "ConnectSinful": self.connect_sinful,
             "Encryption": self.encryption,
             "Enact": "NO",
