@@ -127,3 +127,24 @@ further detail at `D_SECURITY|D_FULLDEBUG`. That last failure is the open item:
 either libscitokens cannot verify our self-signed JWKS endpoint, or it dislikes a
 claim. The quickest way to see its reason is to call `scitoken_deserialize`
 directly in a container against a minted token.
+
+### The issuer, as it now stands (and the last thing it needs)
+
+`issuer.py` mints tokens and serves, over https with a throwaway CA certificate:
+
+| path | what libscitokens wants from it |
+| --- | --- |
+| `/.well-known/openid-configuration` | **`jwks_uri`** - it reads this, not `scitoken-config` |
+| `/jwks` | the RSA key that signed the token |
+
+The certificate must also be a trust anchor in the daemon's store
+(`/etc/pki/ca-trust/source/anchors/local-issuer.crt`, then `update-ca-trust`), and
+libscitokens **persists a negative cache** - `~/.cache/scitokens/scitokens_cpp.sqllite`
+- so a failed fetch keeps failing until that file is removed.
+
+Its remaining complaint, in its own words, is `SSL peer certificate or SSH remote key
+was not OK` even after `curl` trusts the anchor: it uses its own TLS store rather than
+the system bundle that `update-ca-trust` rewrites. Making it use ours (a
+`SSL_CERT_FILE`/`CURL_CA_BUNDLE` for the daemon, or a certificate signed by an anchor
+already in its store) is the next step - and then the successful SCITOKENS *write*
+can be captured, which is what the client's handshake needs.

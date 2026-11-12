@@ -57,7 +57,17 @@ def mint(subject: str = "rcurrie", lifetime: int = 3600) -> str:
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
-        if self.path.rstrip("/") in ("/.well-known/scitoken-config", "/scitoken-config"):
+        if self.path.rstrip("/") in ("/.well-known/openid-configuration", "/openid-configuration"):
+            # What libscitokens actually reads: an OpenID configuration naming the JWKS.
+            body = json.dumps(
+                {
+                    "issuer": ISSUER,
+                    "jwks_uri": f"{ISSUER}/jwks",
+                    "token_endpoint": f"{ISSUER}/token",
+                    "token_endpoint_auth_methods_supported": ["private_key_jwt"],
+                }
+            ).encode()
+        elif self.path.rstrip("/") in ("/.well-known/scitoken-config", "/scitoken-config"):
             body = json.dumps({"issuer": ISSUER, "jwks_uri": f"{ISSUER}/jwks"}).encode()
         elif self.path.rstrip("/") == "/jwks":
             body = json.dumps(JWKS).encode()
@@ -90,6 +100,8 @@ def _tls_context() -> ssl.SSLContext:
         .public_key(key.public_key()).serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=5))
         .not_valid_after(now + datetime.timedelta(hours=1))
+        # A trust anchor, so a daemon can be told to believe this endpoint.
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
     )
     handle, path = tempfile.mkstemp(suffix=".pem")
@@ -98,6 +110,11 @@ def _tls_context() -> ssl.SSLContext:
         written.write(key.private_bytes(serialization.Encoding.PEM,
                                         serialization.PrivateFormat.PKCS8,
                                         serialization.NoEncryption()))
+    # The certificate is also written where a daemon's trust store can be given it:
+    # libscitokens verifies the JWKS endpoint's TLS ("SSL peer certificate ... not OK"
+    # is what it says otherwise).
+    with open("/tmp/issuer-ca.pem", "wb") as anchor:
+        anchor.write(certificate.public_bytes(serialization.Encoding.PEM))
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(path)
     return context
