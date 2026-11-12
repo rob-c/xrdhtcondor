@@ -81,8 +81,10 @@ def main() -> int:
     failures = 0
 
     collector = negotiate(COLLECTOR_HOST, "collector", QUERY_SCHEDD_ADS)
-    print(f"collector: {collector.get('Authentication')!r} auth, "
-          f"enact={collector.get('Enact')!r}, domain={collector.get('TrustDomain')!r}")
+    print(
+        f"collector: {collector.get('Authentication')!r} auth, "
+        f"enact={collector.get('Enact')!r}, domain={collector.get('TrustDomain')!r}"
+    )
     failures += collector.get("Authentication") != "YES"
 
     host, sock = schedd_address()
