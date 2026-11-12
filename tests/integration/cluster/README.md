@@ -82,3 +82,30 @@ So the key exchange works and the remaining fault is inside the first sealed
 packet: the running-digest AAD (which traffic is hashed, and how the two digests
 are ordered) or the header's length and type. Everything above it - query, address,
 greeting, negotiation, QMGMT framing - is now proven against this pool.
+
+## A token-based pool (`issuer.py`, `--token` paths)
+
+The pool can be made token-capable, which is what lets the SciTokens exchange be
+developed without any site's cooperation and without a browser:
+
+```sh
+docker compose cp issuer.py cm:/tmp/issuer.py
+docker compose exec cm bash -c 'nohup python3 /tmp/issuer.py & sleep 1; python3 /tmp/issuer.py mint > /tmp/token'
+docker compose cp cm:/tmp/token /tmp/token && docker compose cp /tmp/token submit:/tmp/token
+```
+
+`issuer.py` is a self-contained SciTokens issuer: it signs RS256 tokens with a key
+it generates, and publishes the JWKS the daemon fetches to verify them. The pool's
+config (`98-testbed-common.config`) accepts the audience those tokens carry
+(`https://wlcg.cern.ch/jwt/v1/any`) and any foreign issuer
+(`SEC_SCITOKENS_FOREIGN_TOKEN_ISSUERS = *`), with SCITOKENS in the READ and WRITE
+classes - a collector query is a READ, so DEFAULT alone is not enough.
+
+Two things this taught, both worth keeping:
+
+- **Reads do not authenticate.** `condor_status -direct` against an open pool
+  succeeds without any token at all, so a "successful" real-client test proves
+  nothing about SCITOKENS. Only a *write* - a submit - forces the exchange.
+- The real client sends its SECMAN request and then the query in clear on the same
+  connection when the daemon authorises anonymously, which is what the capture of
+  a read looks like.
