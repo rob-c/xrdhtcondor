@@ -224,3 +224,18 @@ the CE parsed the message and refused it, which is what a CE does when it wants
 the GSI method it advertises. That is the next piece: `GSI` over CEDAR, whose
 handshake is Condor's own (its framing, its ECDH, its AES), not a copy of
 XrdSec's.
+
+### What IC-HEP actually refuses (measured)
+
+`ceprod00.grid.hep.ph.ic.ac.uk:9619` closes the connection **immediately after the
+greeting** - before any SECMAN message, with GSI, CLAIMTOBE, or no request at
+all. So the refusal is not about the method: the CE's schedd sits behind
+`condor_shared_port`, which routes by the sock name in the greeting, and an
+unknown name is closed. Its collector port, 9618, which is where that name is
+published, is closed to us. IC-HEP is therefore not reachable over CEDAR from
+here for a transport reason, whatever we implement above it.
+
+CERN's CEs are a better target: `condorce01/02.cern.ch` and `ce503.cern.ch`
+have **both** 9618 and 9619 open, so the schedd's address - and its published
+sock name - can be read from the collector, then negotiated with. That is the
+next step, and it does not depend on IC-HEP's firewalling.
