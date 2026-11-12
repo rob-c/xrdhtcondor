@@ -58,3 +58,12 @@ name, which is required for this command (1112 QMGMT_WRITE_CMD), so aborting.
 A collector query may be anonymous; a queue-manager write may not. The remaining
 work is therefore authentication (CLAIMTOBE's identity correctly sent, and GSI for
 a real CE), not more QMGMT framing.
+
+## The session is not optional
+
+Capturing a real `condor_submit` in the pool shows the schedd answer the
+negotiation with `Enact = "YES"`: the CLAIMTOBE identity and every QMGMT command
+after it travel **encrypted**. There is no plaintext queue-manager exchange to
+imitate, which is why `probe_qmgmt.py` reaches `InitializeConnection` and stops.
+`crypto.py` holds the cipher; `probe_session.py` is where the framing is being
+settled, with this pool as the oracle.

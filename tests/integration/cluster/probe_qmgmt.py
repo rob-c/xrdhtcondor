@@ -80,8 +80,8 @@ def main() -> int:
         conn.sendall(cedar.greeting(sock))
         request = cedar.SecurityRequest(
             auth_methods="CLAIMTOBE",
-            encryption="NEVER",
-            integrity="NEVER",
+            encryption="OPTIONAL",
+            integrity="OPTIONAL",
             authentication="REQUIRED",
             command=QMGMT_WRITE_CMD,
             subsystem="SUBMIT",
@@ -92,9 +92,9 @@ def main() -> int:
         print(f"  negotiation: {len(negotiated or b'')} bytes")
 
         # CLAIMTOBE: the client then says who it is, as the capture shows.
-        conn.sendall(cedar.frame(cedar.code_int(1) + b"condor\x00"))
+        conn.sendall(cedar.frame(cedar.code_int(1) + b"root\x00"))
         named = read_frame(conn)
-        print(f"  identity:    {len(named or b'')} bytes")
+        print(f"  identity:    {len(named or b'')} bytes {named!r}")
 
         conn.sendall(cedar.frame(cedar.code_int(INITIALIZE)))
         print(f"  initialize:  {read_return(conn)!r}")

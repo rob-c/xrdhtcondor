@@ -344,3 +344,21 @@ it is authentication: asking for `Authentication = "REQUIRED"` moves the failure
 on to `AUTHENTICATE:1002:Failure performing handshake`, which is where the
 CLAIMTOBE identity (`code(int 1)` then the name with a NUL, segment 5 of the
 capture) has to be sent correctly - and where GSI would go for a real CE.
+
+## Why QMGMT needs the session layer (captured from a real submit)
+
+A `tcpdump` of `condor_submit` inside the pool shows the whole shape:
+
+- the client offers `Authentication = "OPTIONAL"`, `Integrity = "OPTIONAL"`,
+  `OutgoingNegotiation = "PREFERRED"`, with a trust domain, a lease and an ECDH key;
+- the schedd answers `Authentication = "YES"`, `Encryption = "YES"`,
+  `Integrity = "YES"`, `Enact = "YES"` - **it enacts an encrypted session**;
+- everything after that message is ciphertext: the CLAIMTOBE identity, the
+  `InitializeConnection`, `NewCluster`, every `SetAttribute`, and the commit.
+
+So there is no plaintext QMGMT to imitate, and our plaintext identity frame was
+refused because the schedd had already moved to the session. `crypto.py` already
+implements the cipher (HKDF-SHA256 with the `"htcondor"` salt and `"keygen"` info
+over the ECDH secret, AES-256-GCM, the IV counters, the handshake-digest AAD), and
+the session framing is now the one piece left before a job can be submitted by our
+own messages: `probe_session.py` is where that is being settled, against this pool.
