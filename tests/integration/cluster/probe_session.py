@@ -57,13 +57,24 @@ def negotiate(host: str, sock: str, command: int, key: ec.EllipticCurvePrivateKe
         conn.settimeout(20)
         conn.sendall(cedar.greeting(sock))
         conn.sendall(cedar.frame(cedar.security_message(request.as_classads())))
-        answer = conn.recv(65536)
+        answer = b""
+        while True:
+            try:
+                chunk = conn.recv(65536)
+            except TimeoutError:
+                break
+            if not chunk:
+                break
+            answer += chunk
+    merged: dict = {}
     for _kind, payload in cedar.Deframer().feed(answer):
         try:
-            return cedar.parse_wire_classads(payload)
+            merged.update(cedar.parse_wire_classads(payload))
         except cedar.CedarError:
             continue
-    raise SystemExit("no classad in the schedd's reply")
+    if not merged:
+        raise SystemExit("no classad in the schedd's reply")
+    return merged
 
 
 def main() -> int:
@@ -102,11 +113,19 @@ def main() -> int:
         conn.sendall(cedar.frame(cedar.security_message(request.as_classads())))
         answer = conn.recv(65536)
         print(f"  second negotiation: {len(answer)} bytes")
-        digests = bytes(64)
-        payload = cedar.code_int(QMGMT) + b"XXXX\x00"  # a nonce-shaped message
+        # The digests are the traffic so far, and they go in the AAD, not on the
+        # wire: the session packet is header, ciphertext, tag and nothing else.
+        import hashlib
+
+        codec = crypto.PacketCodec(key=session)
+        sent = hashlib.sha256(
+            cedar.greeting(sock) + cedar.frame(cedar.security_message(request.as_classads()))
+        ).digest()
+        received = hashlib.sha256(answer).digest()
+        payload = cedar.code_int(QMGMT) + b"XXXX\x00"
         header = b"\x01" + len(payload).to_bytes(4, "big")
-        sealed = crypto.PacketCodec(key=session).seal(header, payload, digests)
-        conn.sendall(digests + header + sealed)
+        sealed = codec.seal(header, payload, sent + received)
+        conn.sendall(header + sealed)
         try:
             got = conn.recv(65536)
             print(f"  session reply: {len(got)} bytes {got[:24]!r}")
