@@ -463,3 +463,30 @@ candidates left are *when* the digest contexts start (the measured match fixes t
 client's own digest, not the daemon's half of the AAD) and the session binding: a
 queue-manager connection may have to name the `Sid` the negotiation returned before
 its commands are honoured.
+
+### Both halves of the AAD, measured
+
+The first half was solved first: the daemon's `Expecting AAD` line named a digest
+that matched `sha256` of every frame the client had sent since the SECMAN request,
+headers included. The second half was solved the same way, by recording what the
+daemon sent and hashing candidates:
+
+| candidate (daemon's own traffic) | digest |
+| --- | --- |
+| all received | `9e480d71…` |
+| SECMAN reply only | `41396a98…` |
+| payloads only | `3650f0de…` |
+| **every frame before the current one** | **`6dc5163d…` — the daemon's value** |
+
+So the AAD is
+
+    sha256(every frame sent before this one) || sha256(every frame received before this one)
+
+with frames counted from the SECMAN request onward (the greeting is not part of
+it) and the packet being sealed excluded. That is a running digest finalised at
+the moment of sending, which is exactly what `m_send_md_ctx`/`m_recv_md_ctx` do.
+
+One more observation from the recording: during the handshake the daemon sends five
+frames, and the last of them (376 bytes) is already ciphertext - it opens the
+session from its side. A client that treats it as a stray message and ignores it
+will never see the state the daemon expects.
